@@ -16,7 +16,7 @@ type CustomClaims struct {
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(userID uuid.UUID, kycStatus string) (string, error) {
+func GenerateToken(secretKey []byte, userID uuid.UUID, kycStatus string) (string, error) {
 	// create the payload (claims)
 	claims := CustomClaims{
 		UserID:    userID,
@@ -35,7 +35,7 @@ func GenerateToken(userID uuid.UUID, kycStatus string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	// sign the token with our secret key
-	signedToken, err := token.SignedString(jwtSecretKey)
+	signedToken, err := token.SignedString(secretKey)
 	if err != nil {
 		return "", err
 	}
@@ -43,9 +43,9 @@ func GenerateToken(userID uuid.UUID, kycStatus string) (string, error) {
 	return signedToken, nil
 }
 
-func VerifyToken(tokenString string) (*CustomClaims, error) {
+func VerifyToken(secretKey []byte, tokenString string) (*CustomClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &CustomClaims{}, func(t *jwt.Token) (any, error) {
-		return jwtSecretKey, nil
+		return secretKey, nil
 	})
 
 	if err != nil {

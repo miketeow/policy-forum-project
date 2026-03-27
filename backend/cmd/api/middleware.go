@@ -25,7 +25,7 @@ func (app *application) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 		// verify it
-		claims, err := auth.VerifyToken(tokenString)
+		claims, err := auth.VerifyToken(app.jwtSecret, tokenString)
 		if err != nil {
 			http.Error(w, "Unauthorized: Invalid token", http.StatusUnauthorized)
 			return

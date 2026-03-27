@@ -5,20 +5,33 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"policy-forum-backend/internal/auth"
 	"policy-forum-backend/internal/store"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 )
 
 // dependency injection container
 type application struct {
-	db *store.Queries
+	jwtSecret []byte
+	db        *store.Queries
 }
 
 func main() {
+	// load environment variables
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, falling back to system environment variables")
+	}
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET environment variable is required but not set")
+	}
+
 	// connect to database using pgxpool for concurrency safety
 	dsn := "postgres://admin:password123@localhost:5432/policy_forum?sslmode=disable"
 	pool, err := pgxpool.New(context.Background(), dsn)
@@ -31,7 +44,8 @@ func main() {
 
 	// Initialize the application atruct with the sqlc-generated store
 	app := &application{
-		db: store.New(pool),
+		db:        store.New(pool),
+		jwtSecret: []byte(jwtSecret),
 	}
 
 	// Create private router
@@ -171,7 +185,7 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenString, err := auth.GenerateToken(user.ID, user.KycStatus)
+	tokenString, err := auth.GenerateToken(app.jwtSecret, user.ID, user.KycStatus)
 	if err != nil {
 
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
