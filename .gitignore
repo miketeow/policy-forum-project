@@ -1,0 +1,9 @@
+# Root Gitignore
+node_modules/
+.env
+.env.*
+.DS_Store
+
+# Go specific
+backend/tmp/
+backend/main
