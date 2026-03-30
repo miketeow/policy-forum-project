@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import { cookies } from "next/headers";
+import { getSession } from "@/lib/session";
+
 import { redirect } from "next/navigation";
 
 interface UserProfile {
@@ -12,22 +13,11 @@ interface UserProfile {
   updated_at: string;
 }
 export default async function Dashboard() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("session")?.value;
+  const user: UserProfile = await getSession();
 
-  const res = await fetch("http://localhost:8080/api/users/me", {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    // don't store in cache, we want fresh data everytime they load the page
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
+  if (!user) {
     redirect("/sign-in");
   }
-
-  const user: UserProfile = await res.json();
 
   return (
     <div className="p-10 max-w-4xl mx-auto py-20">

@@ -7,7 +7,6 @@ import Link from "next/link";
 
 export async function Header() {
   const user = await getSession();
-  console.log("User is logged in now", user);
   return (
     <header className="bg-background/75 fixed inset-x-0 top-0 z-50 py-4 backdrop-blur-md">
       <div className="container flex max-w-6xl items-center justify-between">

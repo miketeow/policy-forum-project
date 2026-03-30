@@ -7,8 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-var jwtSecretKey = []byte("super-secret-key")
-
 // define the structure of the data that we put into the JWT claims
 type CustomClaims struct {
 	UserID    uuid.UUID `json:"user_id"`
