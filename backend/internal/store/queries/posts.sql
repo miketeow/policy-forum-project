@@ -1,0 +1,18 @@
+-- name: CreatePost :one
+INSERT INTO posts (id, user_id, title, content, category, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: GetPostByID :one
+SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, users.id AS author_id, users.name AS author_name
+FROM posts
+JOIN users ON posts.user_id = users.id
+WHERE posts.id = $1 LIMIT 1;
+
+-- name: ListPosts :many
+SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name
+FROM posts
+JOIN users ON posts.user_id = users.id
+WHERE (@category::post_category IS NULL OR posts.category = @category)
+ORDER BY posts.created_at DESC
+LIMIT $1 OFFSET $2;

@@ -5,10 +5,78 @@
 package store
 
 import (
+	"database/sql/driver"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type PostCategory string
+
+const (
+	PostCategoryPENDING       PostCategory = "PENDING"
+	PostCategoryURBANPLANNING PostCategory = "URBAN_PLANNING"
+	PostCategoryTRANSPORT     PostCategory = "TRANSPORT"
+	PostCategoryECONOMY       PostCategory = "ECONOMY"
+	PostCategoryHEALTHCARE    PostCategory = "HEALTHCARE"
+	PostCategoryEDUCATION     PostCategory = "EDUCATION"
+	PostCategoryGENERAL       PostCategory = "GENERAL"
+)
+
+func (e *PostCategory) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = PostCategory(s)
+	case string:
+		*e = PostCategory(s)
+	default:
+		return fmt.Errorf("unsupported scan type for PostCategory: %T", src)
+	}
+	return nil
+}
+
+type NullPostCategory struct {
+	PostCategory PostCategory `json:"post_category"`
+	Valid        bool         `json:"valid"` // Valid is true if PostCategory is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullPostCategory) Scan(value interface{}) error {
+	if value == nil {
+		ns.PostCategory, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.PostCategory.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullPostCategory) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.PostCategory), nil
+}
+
+type Comment struct {
+	ID        uuid.UUID `json:"id"`
+	PostID    uuid.UUID `json:"post_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type Post struct {
+	ID        uuid.UUID    `json:"id"`
+	UserID    uuid.UUID    `json:"user_id"`
+	Title     string       `json:"title"`
+	Content   string       `json:"content"`
+	Category  PostCategory `json:"category"`
+	CreatedAt time.Time    `json:"created_at"`
+	UpdatedAt time.Time    `json:"updated_at"`
+}
 
 type User struct {
 	ID             uuid.UUID `json:"id"`
