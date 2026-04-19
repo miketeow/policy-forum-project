@@ -37,7 +37,7 @@ export default function RootLayout({
       >
         <Providers>
           <Header />
-          {children}
+          <main className="flex-1 pt-24 pb-12">{children}</main>
           <Toaster />
         </Providers>
       </body>

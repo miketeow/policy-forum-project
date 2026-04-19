@@ -57,6 +57,10 @@ func main() {
 	mux.HandleFunc("POST /api/auth/login", app.loginHandler)
 	mux.HandleFunc("POST /api/auth/logout", app.logoutHandler)
 	mux.HandleFunc("GET /api/users/me", app.requireAuth(app.getUserProfileHandler))
+	// public: anyone can see posts
+	mux.HandleFunc("GET /api/posts", app.listPostHandler)
+	// protected: must be logged in to post
+	mux.HandleFunc("POST /api/posts", app.requireAuth(app.createPostHandler))
 
 	handlerWithCORS := corsMiddleware(mux)
 
