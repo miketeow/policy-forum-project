@@ -1,0 +1,83 @@
+import { Badge } from "@/components/ui/badge";
+import { getSession } from "@/lib/session";
+import { formatDate } from "@/lib/utils";
+import { redirect } from "next/navigation";
+
+interface PostDetailPageProps {
+  params: Promise<{ postId: string }>;
+}
+
+interface PostDetail {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  created_at: string;
+  updated_at: string;
+  author_id: string;
+  author_name: string;
+}
+
+async function getPostByID(postId: string): Promise<PostDetail | null> {
+  try {
+    const res = await fetch(`http://localhost:8080/api/posts/${postId}`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      if (res.status === 404) {
+        return null;
+      }
+      throw new Error("Failed to fetch post");
+    }
+
+    return res.json();
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+}
+export default async function PostDetailPage({ params }: PostDetailPageProps) {
+  const user = await getSession();
+  if (!user) redirect("sign-in");
+
+  const { postId } = await params;
+  const post = await getPostByID(postId);
+
+  if (!post) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-20 text-center">
+        <h1 className="text-2xl font-bold">Post Not Found</h1>
+        <p className="text-muted-foreground mt-2">
+          The discussion you are looking for does not exist or has been deleted.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col mx-auto w-full max-w-3xl px-4 gap-8">
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Badge>{post.category}</Badge>
+          <span className="text-sm text-muted-foreground">
+            {formatDate(post.created_at)}
+          </span>
+        </div>
+
+        <h1 className="text-3xl font-bold tracking-tight mb-2">{post.title}</h1>
+
+        <p className="text-muted-foreground border-b pb-6">
+          Posted by{" "}
+          <span className="font-medium text-foreground">
+            {post.author_name}
+          </span>
+        </p>
+
+        <div className="mt-6 text-base leading-relaxed whitespace-pre-wrap">
+          {post.content}
+        </div>
+      </div>
+    </div>
+  );
+}

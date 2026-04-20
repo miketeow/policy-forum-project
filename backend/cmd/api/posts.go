@@ -84,3 +84,26 @@ func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(posts)
 
 }
+
+func (app *application) getPostHandler(w http.ResponseWriter, r *http.Request) {
+	// extract id from params
+	idParam := r.PathValue("postId")
+
+	postId, err := uuid.Parse(idParam)
+
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid post ID format")
+		return
+	}
+
+	// fetch from database
+	post, err := app.db.GetPostByID(r.Context(), postId)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "Post not found")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(post)
+}

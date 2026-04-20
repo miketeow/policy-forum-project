@@ -61,6 +61,7 @@ func main() {
 	mux.HandleFunc("GET /api/posts", app.listPostHandler)
 	// protected: must be logged in to post
 	mux.HandleFunc("POST /api/posts", app.requireAuth(app.createPostHandler))
+	mux.HandleFunc("GET /api/posts/{postId}", app.getPostHandler)
 
 	handlerWithCORS := corsMiddleware(mux)
 
