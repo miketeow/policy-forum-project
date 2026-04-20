@@ -10,21 +10,23 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createComments = `-- name: CreateComments :one
-INSERT INTO comments (id, post_id, user_id, content, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, post_id, user_id, content, created_at, updated_at
+INSERT INTO comments (id, post_id, user_id, parent_id,content, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, post_id, user_id, content, created_at, updated_at, parent_id
 `
 
 type CreateCommentsParams struct {
-	ID        uuid.UUID `json:"id"`
-	PostID    uuid.UUID `json:"post_id"`
-	UserID    uuid.UUID `json:"user_id"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        uuid.UUID   `json:"id"`
+	PostID    uuid.UUID   `json:"post_id"`
+	UserID    uuid.UUID   `json:"user_id"`
+	ParentID  pgtype.UUID `json:"parent_id"`
+	Content   string      `json:"content"`
+	CreatedAt time.Time   `json:"created_at"`
+	UpdatedAt time.Time   `json:"updated_at"`
 }
 
 func (q *Queries) CreateComments(ctx context.Context, arg CreateCommentsParams) (Comment, error) {
@@ -32,6 +34,7 @@ func (q *Queries) CreateComments(ctx context.Context, arg CreateCommentsParams) 
 		arg.ID,
 		arg.PostID,
 		arg.UserID,
+		arg.ParentID,
 		arg.Content,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -44,12 +47,13 @@ func (q *Queries) CreateComments(ctx context.Context, arg CreateCommentsParams) 
 		&i.Content,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ParentID,
 	)
 	return i, err
 }
 
 const getCommentsByPostID = `-- name: GetCommentsByPostID :many
-SELECT comments.id, comments.content, comments.created_at, comments.updated_at, users.id AS author_id, users.name AS author_name
+SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at, users.id AS author_id, users.name AS author_name
 FROM comments
 JOIN users ON comments.user_id = users.id
 WHERE comments.post_id = $1
@@ -57,12 +61,13 @@ ORDER BY comments.created_at DESC
 `
 
 type GetCommentsByPostIDRow struct {
-	ID         uuid.UUID `json:"id"`
-	Content    string    `json:"content"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-	AuthorID   uuid.UUID `json:"author_id"`
-	AuthorName string    `json:"author_name"`
+	ID         uuid.UUID   `json:"id"`
+	ParentID   pgtype.UUID `json:"parent_id"`
+	Content    string      `json:"content"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
+	AuthorID   uuid.UUID   `json:"author_id"`
+	AuthorName string      `json:"author_name"`
 }
 
 func (q *Queries) GetCommentsByPostID(ctx context.Context, postID uuid.UUID) ([]GetCommentsByPostIDRow, error) {
@@ -76,6 +81,7 @@ func (q *Queries) GetCommentsByPostID(ctx context.Context, postID uuid.UUID) ([]
 		var i GetCommentsByPostIDRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.ParentID,
 			&i.Content,
 			&i.CreatedAt,
 			&i.UpdatedAt,
