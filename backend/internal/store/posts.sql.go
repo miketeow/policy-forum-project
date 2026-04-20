@@ -95,9 +95,9 @@ LIMIT $1 OFFSET $2
 `
 
 type ListPostsParams struct {
-	Limit    int32        `json:"limit"`
-	Offset   int32        `json:"offset"`
-	Category PostCategory `json:"category"`
+	Limit    int32            `json:"limit"`
+	Offset   int32            `json:"offset"`
+	Category NullPostCategory `json:"category"`
 }
 
 type ListPostsRow struct {

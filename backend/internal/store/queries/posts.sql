@@ -13,6 +13,6 @@ WHERE posts.id = $1 LIMIT 1;
 SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name
 FROM posts
 JOIN users ON posts.user_id = users.id
-WHERE (@category::post_category IS NULL OR posts.category = @category)
+WHERE (sqlc.narg('category')::post_category IS NULL OR posts.category = sqlc.narg('category'))
 ORDER BY posts.created_at DESC
 LIMIT $1 OFFSET $2;
