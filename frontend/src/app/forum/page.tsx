@@ -1,7 +1,8 @@
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { CreatePostForm } from "./_components/create-post-form";
-import { Post, PostCard } from "./_components/post-card";
+import { Post } from "./_components/post-card";
+import { PostList } from "./_components/post-list";
 
 interface UserProfile {
   id: string;
@@ -20,7 +21,8 @@ async function getPosts(): Promise<Post[]> {
     });
 
     if (!res.ok) {
-      console.error("Failed to fetch posts from backend");
+      const errorText = await res.text(); // Read the Go error message
+      console.error(`Backend failed with status ${res.status}:`, errorText);
       return [];
     }
 
@@ -58,19 +60,8 @@ export default async function Forum() {
       {/*the feed*/}
       <div className="flex flex-col gap-4">
         <h2 className="text-xl font-semibold pb-2">Recent Discussions</h2>
-        {posts.length === 0 ? (
-          <div className="pb-4 rounded-md opacity-50 flex items-center justify-center h-32 bg-muted/50">
-            <p className="text-muted-foreground text-sm">
-              No discussion yet. Be the first to post!
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {posts.map((post) => (
-              <PostCard key={post.id} post={post} />
-            ))}
-          </div>
-        )}
+
+        <PostList initialPosts={posts} />
       </div>
     </div>
   );

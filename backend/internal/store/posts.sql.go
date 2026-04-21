@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createPost = `-- name: CreatePost :one
@@ -89,15 +90,16 @@ const listPosts = `-- name: ListPosts :many
 SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name
 FROM posts
 JOIN users ON posts.user_id = users.id
-WHERE ($3::post_category IS NULL OR posts.category = $3)
+WHERE ($2::post_category IS NULL OR posts.category = $2)
+AND ($3::timestamp IS NULL OR posts.created_at < $3)
 ORDER BY posts.created_at DESC
-LIMIT $1 OFFSET $2
+LIMIT $1
 `
 
 type ListPostsParams struct {
 	Limit    int32            `json:"limit"`
-	Offset   int32            `json:"offset"`
 	Category NullPostCategory `json:"category"`
+	Cursor   pgtype.Timestamp `json:"cursor"`
 }
 
 type ListPostsRow struct {
@@ -109,7 +111,7 @@ type ListPostsRow struct {
 }
 
 func (q *Queries) ListPosts(ctx context.Context, arg ListPostsParams) ([]ListPostsRow, error) {
-	rows, err := q.db.Query(ctx, listPosts, arg.Limit, arg.Offset, arg.Category)
+	rows, err := q.db.Query(ctx, listPosts, arg.Limit, arg.Category, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}

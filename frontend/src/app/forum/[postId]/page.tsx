@@ -4,6 +4,7 @@ import { formatDate } from "@/lib/utils";
 import { redirect } from "next/navigation";
 import { CommentNode, CommentThread } from "../_components/comment-thread";
 import { CreateCommentForm } from "../_components/create-comment-form";
+import { BreadcrumbNav } from "../_components/breadcumb-nav";
 
 interface PostDetailPageProps {
   params: Promise<{ postId: string }>;
@@ -118,11 +119,17 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
     );
   }
 
+  const breadcrumbs = [
+    { label: "Forum", href: "/forum" },
+    { label: post.title },
+  ];
+
   // build the tree
   const commentTree = buildCommentTree(flatComments);
 
   return (
-    <div className="flex flex-col mx-auto w-full max-w-3xl px-4 gap-8">
+    <div className="flex flex-col mx-auto w-full max-w-3xl px-4 gap-8 py-8">
+      <BreadcrumbNav items={breadcrumbs} />
       <div>
         <div className="flex items-center gap-2 mb-4">
           <Badge>{post.category}</Badge>

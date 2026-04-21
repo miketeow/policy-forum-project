@@ -5,15 +5,23 @@ import (
 	"log"
 	"net/http"
 	"policy-forum-backend/internal/store"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type CreatePostReqeust struct {
 	Title    string `json:"title"`
 	Content  string `json:"content"`
 	Category string `json:"category"`
+}
+
+type PaginationRequest struct {
+	Limit  int
+	Cursor time.Time
+	Sort   string
 }
 
 func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request) {
@@ -63,26 +71,26 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) {
-	args := store.ListPostsParams{
-		Limit:  50,
-		Offset: 0,
-	}
+	pagination := parsePagination(r)
+	hasCursor := !pagination.Cursor.IsZero()
 
-	posts, err := app.db.ListPosts(r.Context(), args)
+	posts, err := app.db.ListPosts(r.Context(), store.ListPostsParams{
+		Limit: int32(pagination.Limit),
+		Cursor: pgtype.Timestamp{
+			Time:  pagination.Cursor,
+			Valid: hasCursor,
+		},
+	})
 	if err != nil {
-		log.Printf("Failed to list posts: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "Internal Server Error")
+		log.Printf("DB Error in listPostHandler: %v", err)
+		writeJSONError(w, http.StatusBadRequest, "Failed to list posts")
 		return
 	}
-
 	// if no posts exist, make sure to return empty array instead of null
 	if posts == nil {
 		posts = []store.ListPostsRow{}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(posts)
-
+	writeJSON(w, http.StatusOK, posts)
 }
 
 func (app *application) getPostHandler(w http.ResponseWriter, r *http.Request) {
@@ -106,4 +114,26 @@ func (app *application) getPostHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(post)
+}
+
+func parsePagination(r *http.Request) PaginationRequest {
+	// default
+	req := PaginationRequest{
+		Limit: 20,
+		Sort:  "desc",
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			req.Limit = l
+		}
+	}
+
+	if cursorStr := r.URL.Query().Get("cursor"); cursorStr != "" {
+		if t, err := time.Parse(time.RFC3339Nano, cursorStr); err == nil {
+			req.Cursor = t
+		}
+	}
+
+	return req
 }

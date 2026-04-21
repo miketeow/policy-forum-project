@@ -14,5 +14,6 @@ SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS au
 FROM posts
 JOIN users ON posts.user_id = users.id
 WHERE (sqlc.narg('category')::post_category IS NULL OR posts.category = sqlc.narg('category'))
+AND (sqlc.narg('cursor')::timestamp IS NULL OR posts.created_at < sqlc.narg('cursor'))
 ORDER BY posts.created_at DESC
-LIMIT $1 OFFSET $2;
+LIMIT $1;
