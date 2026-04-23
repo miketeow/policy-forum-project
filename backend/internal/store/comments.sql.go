@@ -52,15 +52,30 @@ func (q *Queries) CreateComments(ctx context.Context, arg CreateCommentsParams) 
 	return i, err
 }
 
-const getCommentsByPostID = `-- name: GetCommentsByPostID :many
-SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at, users.id AS author_id, users.name AS author_name
+const listComments = `-- name: ListComments :many
+SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at, users.id AS author_id, users.name AS author_name,
+    (SELECT COUNT(*) FROM comments AS replies WHERE replies.parent_id = comments.id) AS reply_count
 FROM comments
 JOIN users ON comments.user_id = users.id
 WHERE comments.post_id = $1
+AND(
+($3::uuid IS NULL AND comments.parent_id IS NULL)
+OR
+(comments.parent_id = $3)
+)
+AND ($4::timestamp IS NULL OR comments.created_at < $4)
 ORDER BY comments.created_at DESC
+LIMIT $2
 `
 
-type GetCommentsByPostIDRow struct {
+type ListCommentsParams struct {
+	PostID   uuid.UUID        `json:"post_id"`
+	Limit    int32            `json:"limit"`
+	ParentID pgtype.UUID      `json:"parent_id"`
+	Cursor   pgtype.Timestamp `json:"cursor"`
+}
+
+type ListCommentsRow struct {
 	ID         uuid.UUID   `json:"id"`
 	ParentID   pgtype.UUID `json:"parent_id"`
 	Content    string      `json:"content"`
@@ -68,17 +83,23 @@ type GetCommentsByPostIDRow struct {
 	UpdatedAt  time.Time   `json:"updated_at"`
 	AuthorID   uuid.UUID   `json:"author_id"`
 	AuthorName string      `json:"author_name"`
+	ReplyCount int64       `json:"reply_count"`
 }
 
-func (q *Queries) GetCommentsByPostID(ctx context.Context, postID uuid.UUID) ([]GetCommentsByPostIDRow, error) {
-	rows, err := q.db.Query(ctx, getCommentsByPostID, postID)
+func (q *Queries) ListComments(ctx context.Context, arg ListCommentsParams) ([]ListCommentsRow, error) {
+	rows, err := q.db.Query(ctx, listComments,
+		arg.PostID,
+		arg.Limit,
+		arg.ParentID,
+		arg.Cursor,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetCommentsByPostIDRow
+	var items []ListCommentsRow
 	for rows.Next() {
-		var i GetCommentsByPostIDRow
+		var i ListCommentsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ParentID,
@@ -87,6 +108,7 @@ func (q *Queries) GetCommentsByPostID(ctx context.Context, postID uuid.UUID) ([]
 			&i.UpdatedAt,
 			&i.AuthorID,
 			&i.AuthorName,
+			&i.ReplyCount,
 		); err != nil {
 			return nil, err
 		}

@@ -130,8 +130,26 @@ func parsePagination(r *http.Request) PaginationRequest {
 	}
 
 	if cursorStr := r.URL.Query().Get("cursor"); cursorStr != "" {
-		if t, err := time.Parse(time.RFC3339Nano, cursorStr); err == nil {
-			req.Cursor = t
+		layouts := []string{
+			time.RFC3339Nano,
+			time.RFC3339,
+			"2006-01-02T15:04:05.999999Z07:00",
+			"2006-01-02T15:04:05.999999", // Common Postgres format (no Z)
+			"2006-01-02 15:04:05.999999", // Space instead of T
+		}
+
+		var parsed time.Time
+		var err error
+		for _, layout := range layouts {
+			parsed, err = time.Parse(layout, cursorStr)
+			if err == nil {
+				req.Cursor = parsed.UTC()
+				break
+			}
+		}
+
+		if err != nil {
+			log.Printf("[PAGINATION ERROR] Failed to parse cursor '%s'. Error: %v", cursorStr, err)
 		}
 	}
 

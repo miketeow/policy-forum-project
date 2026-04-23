@@ -3,7 +3,9 @@
 import { createCommentAction } from "@/app/actions/forum";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { fetchComments } from "@/lib/api-comments";
 import { formatDate } from "@/lib/utils";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -14,7 +16,7 @@ export interface CommentNode {
   created_at: string;
   author_name: string;
   author_id: string;
-  children: CommentNode[];
+  reply_count: number;
 }
 
 export function CommentThread({
@@ -26,6 +28,25 @@ export function CommentThread({
 }) {
   const [isReplying, setIsReplying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showReply, setShowReply] = useState(false);
+
+  const queryClient = useQueryClient();
+
+  const { data, status, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: ["comments", postId, comment.id],
+      queryFn: ({ pageParam }) =>
+        fetchComments({ pageParam, postId, parentId: comment.id }),
+      initialPageParam: 0 as string | number,
+      getNextPageParam: (lastPage) => {
+        if (!lastPage || lastPage.length < 5) return undefined;
+        const cursor = lastPage[lastPage.length - 1].created_at;
+        console.log("[REACT TRACER] Passing Cursor to Next Page:", cursor); // ADD THIS
+        return cursor;
+      },
+      // don't fetch from Go backend until user click "show replies"
+      enabled: showReply,
+    });
 
   async function handleReplySubmit(formData: FormData) {
     setIsSubmitting(true);
@@ -36,6 +57,13 @@ export function CommentThread({
     } else {
       toast.success(result.message);
       setIsReplying(false);
+      queryClient.invalidateQueries({
+        queryKey: ["comments", postId, comment.id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["comments", postId, comment.parent_id || "root"],
+      });
+      setShowReply(true);
     }
     setIsSubmitting(false);
   }
@@ -52,15 +80,27 @@ export function CommentThread({
         </div>
 
         <p className="text-sm whitespace-pre-wrap mt-1">{comment.content}</p>
-        <div className="mt-2">
+        <div className="mt-2 flex gap-4">
           <Button
             variant="ghost"
             size="sm"
             className="h-8 px-2 text-muted-foreground hover:text-foreground text-xs"
-            onClick={() => setIsReplying(true)}
+            onClick={() => setIsReplying(!isReplying)}
           >
             {isReplying ? "Cancel" : "Reply"}
           </Button>
+          {comment.reply_count > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs text-blue-500 "
+              onClick={() => setShowReply(!showReply)}
+            >
+              {showReply
+                ? "Hide Replies"
+                : `Show Replies (${comment.reply_count})`}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -86,11 +126,37 @@ export function CommentThread({
         </form>
       )}
 
-      {comment.children.length > 0 && (
+      {showReply && (
         <div className="ml-6 pl-4 border-l-2 mt-2 flex flex-col gap-2">
-          {comment.children.map((child) => (
-            <CommentThread key={child.id} comment={child} postId={postId} />
-          ))}
+          {status === "pending" && (
+            <p className="text-xs text-muted-foreground py-2">
+              Loading replies
+            </p>
+          )}
+          {status === "success" &&
+            data.pages.map((page, i) => (
+              <div key={i} className="flex flex-col gap-2">
+                {page.map((reply: CommentNode) => (
+                  <CommentThread
+                    comment={reply}
+                    postId={postId}
+                    key={reply.id}
+                  />
+                ))}
+              </div>
+            ))}
+
+          {hasNextPage && (
+            <Button
+              variant="link"
+              size="sm"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+              className="self-start text-xs text-muted-foreground"
+            >
+              {isFetchingNextPage ? "Loading..." : "Load more replies"}
+            </Button>
+          )}
         </div>
       )}
     </div>

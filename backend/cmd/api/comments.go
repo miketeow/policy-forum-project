@@ -36,6 +36,12 @@ func (app *application) createCommentHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// if req.ParentID != nil {
+	// 	log.Printf("[CREATE TRACER] Saving Reply! ParentID: %s | Content: %s", req.ParentID.String(), req.Content)
+	// } else {
+	// 	log.Printf("[CREATE TRACER] Saving Root Comment! ParentID is NIL | Content: %s", req.Content)
+	// }
+
 	if req.Content == "" {
 		writeJSONError(w, http.StatusBadRequest, "Comment cannot be empty")
 		return
@@ -85,7 +91,35 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	comments, err := app.db.GetCommentsByPostID(r.Context(), postId)
+	// pagination
+	pagination := parsePagination(r)
+	hasCursor := !pagination.Cursor.IsZero()
+
+	// look for optional parent ID
+	var nullParentID pgtype.UUID
+	parentIDStr := r.URL.Query().Get("parentId")
+	if parentIDStr != "" {
+		pId, err := uuid.Parse(parentIDStr)
+		if err == nil {
+			nullParentID = pgtype.UUID{Bytes: pId, Valid: true}
+			// log.Printf("[FETCH TRACER] Fetching Replies for Parent: %s", parentIDStr)
+		} else {
+			// log.Printf("[FETCH TRACER ERROR] Invalid UUID from frontend: '%s'", parentIDStr)
+			writeJSONError(w, http.StatusBadRequest, "Invalid parent ID format")
+			return
+		}
+	}
+	// call db method
+	comments, err := app.db.ListComments(r.Context(), store.ListCommentsParams{
+		PostID:   postId,
+		Limit:    int32(pagination.Limit),
+		ParentID: nullParentID,
+		Cursor: pgtype.Timestamp{
+			Time:  pagination.Cursor,
+			Valid: hasCursor,
+		},
+	})
+
 	if err != nil {
 		log.Printf("Failed to fetch comments: %v", err)
 		writeJSONError(w, http.StatusInternalServerError, "Internal Server Error")
@@ -94,10 +128,8 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 
 	// preventing null to the frontend, return empty array instead
 	if comments == nil {
-		comments = []store.GetCommentsByPostIDRow{}
+		comments = []store.ListCommentsRow{}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(comments)
+	writeJSON(w, http.StatusOK, comments)
 }
