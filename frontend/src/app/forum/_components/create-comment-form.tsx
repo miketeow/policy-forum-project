@@ -3,12 +3,15 @@
 import { createCommentAction } from "@/app/actions/forum";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 export function CreateCommentForm({ postId }: { postId: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+
+  const queryClient = useQueryClient();
 
   async function handleSubmit(formData: FormData) {
     setIsSubmitting(true);
@@ -19,6 +22,9 @@ export function CreateCommentForm({ postId }: { postId: string }) {
       toast.error(result.error);
     } else {
       toast.success(result.message);
+      queryClient.invalidateQueries({
+        queryKey: ["comments", postId, "root"],
+      });
       formRef.current?.reset(); // clear the textarea after success
     }
 
