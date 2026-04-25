@@ -17,8 +17,10 @@ type Querier interface {
 	GetPostByID(ctx context.Context, id uuid.UUID) (GetPostByIDRow, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
-	ListComments(ctx context.Context, arg ListCommentsParams) ([]ListCommentsRow, error)
-	ListPosts(ctx context.Context, arg ListPostsParams) ([]ListPostsRow, error)
+	ListCommentsByNewest(ctx context.Context, arg ListCommentsByNewestParams) ([]ListCommentsByNewestRow, error)
+	ListCommentsByOldest(ctx context.Context, arg ListCommentsByOldestParams) ([]ListCommentsByOldestRow, error)
+	ListPostsByNewest(ctx context.Context, arg ListPostsByNewestParams) ([]ListPostsByNewestRow, error)
+	ListPostsByOldest(ctx context.Context, arg ListPostsByOldestParams) ([]ListPostsByOldestRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

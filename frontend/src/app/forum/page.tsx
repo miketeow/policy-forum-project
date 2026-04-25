@@ -13,12 +13,15 @@ interface UserProfile {
   updated_at: string;
 }
 
-async function getPosts(): Promise<Post[]> {
+async function getPosts(sort: string): Promise<Post[]> {
   try {
     // hit the go backend directly, set "no-store" to avoid aggresive cache
-    const res = await fetch("http://localhost:8080/api/posts", {
-      cache: "no-store",
-    });
+    const res = await fetch(
+      `http://localhost:8080/api/posts?limit=20&sort=${sort}`,
+      {
+        cache: "no-store",
+      },
+    );
 
     if (!res.ok) {
       const errorText = await res.text(); // Read the Go error message
@@ -32,14 +35,20 @@ async function getPosts(): Promise<Post[]> {
     return [];
   }
 }
-export default async function Forum() {
+export default async function Forum({
+  searchParams,
+}: {
+  searchParams: Promise<{ sort?: string }>;
+}) {
   const user: UserProfile = await getSession();
 
   if (!user) {
     redirect("/sign-in");
   }
 
-  const posts = await getPosts();
+  const resolvedParams = await searchParams;
+  const sort = resolvedParams.sort === "asc" ? "asc" : "desc";
+  const posts = await getPosts(sort);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 flex flex-col gap-8">
@@ -58,11 +67,8 @@ export default async function Forum() {
       <CreatePostForm />
 
       {/*the feed*/}
-      <div className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold pb-2">Recent Discussions</h2>
 
-        <PostList initialPosts={posts} />
-      </div>
+      <PostList initialPosts={posts} initialSort={sort} />
     </div>
   );
 }

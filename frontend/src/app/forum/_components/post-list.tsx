@@ -1,21 +1,38 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { Post, PostCard } from "./post-card";
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface PostListProps {
   initialPosts: Post[];
+  initialSort: "asc" | "desc";
 }
 
-async function fetchPost({ pageParam = 0 }: { pageParam: number | string }) {
+async function fetchPost({
+  pageParam = 0,
+  sort,
+}: {
+  pageParam: number | string;
+  sort?: "desc" | "asc";
+}) {
   // if cursor is 0, don't attach it to the url, get page 1 instead
   // otherwise append it
-  const cursorQuery = pageParam ? `&cursor=${pageParam}` : "";
+  const cursorQuery = pageParam
+    ? `&cursor=${encodeURIComponent(pageParam as string)}`
+    : "";
+  let url = `http://localhost:8080/api/posts?limit=20${cursorQuery}`;
+  if (sort) url += `&sort=${sort}`;
 
-  const res = await fetch(
-    `http://localhost:8080/api/posts?limit=20${cursorQuery}`,
-  );
+  const res = await fetch(url);
 
   if (!res.ok) {
     throw new Error("Failed to fetch posts");
@@ -24,7 +41,17 @@ async function fetchPost({ pageParam = 0 }: { pageParam: number | string }) {
   return res.json();
 }
 
-export function PostList({ initialPosts }: PostListProps) {
+export function PostList({ initialPosts, initialSort }: PostListProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const sortOrder = (searchParams.get("sort") as "desc" | "asc") || initialSort;
+
+  const handleSortChange = (newSort: "desc" | "asc") => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sort", newSort);
+
+    router.push(`?${params.toString()}`, { scroll: false });
+  };
   const {
     data,
     status,
@@ -33,15 +60,15 @@ export function PostList({ initialPosts }: PostListProps) {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ["posts"],
-    queryFn: fetchPost,
+    queryKey: ["posts", sortOrder],
+    queryFn: ({ pageParam }) => fetchPost({ pageParam, sort: sortOrder }),
 
     initialPageParam: 0,
+    placeholderData: keepPreviousData,
     initialData: {
       pages: [initialPosts], // first page
       pageParams: [0], // cursor for first page is 0
     },
-
     // how to figure out the next cursor, TanStack provides the "lastPage" which is the array of 20 posts we just fetched
     getNextPageParam: (lastPage) => {
       // If Go backend return less than 20 items or an empty array
@@ -73,28 +100,54 @@ export function PostList({ initialPosts }: PostListProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      {data.pages.map((page, pageIndex) => (
-        <div key={pageIndex} className="flex flex-col gap-4">
-          {page.map((post: Post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-        </div>
-      ))}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold pb-2">Recent Discussions</h2>
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-muted-foreground"
+            >
+              Sort by: {sortOrder === "desc" ? "Newest" : "Oldest"}
+            </Button>
+          </DropdownMenuTrigger>
 
-      {/*load more action*/}
-      <div className="mt-8 flex justify-center pb-8">
-        <Button
-          onClick={() => fetchNextPage()}
-          disabled={!hasNextPage || isFetchingNextPage}
-          className="px-6 py-2 rounded-md"
-          variant="default"
-        >
-          {isFetchingNextPage
-            ? "Loading more..."
-            : hasNextPage
-              ? "Load More"
-              : "Nothing more to load"}
-        </Button>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => handleSortChange("desc")}>
+              Newest
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleSortChange("asc")}>
+              Oldest
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        {data.pages.map((page, pageIndex) => (
+          <div key={pageIndex} className="flex flex-col gap-4">
+            {page.map((post: Post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </div>
+        ))}
+
+        {/*load more action*/}
+        <div className="mt-8 flex justify-center pb-8">
+          <Button
+            onClick={() => fetchNextPage()}
+            disabled={!hasNextPage || isFetchingNextPage}
+            className="px-6 py-2 rounded-md"
+            variant="default"
+          >
+            {isFetchingNextPage
+              ? "Loading more..."
+              : hasNextPage
+                ? "Load More"
+                : "Nothing more to load"}
+          </Button>
+        </div>
       </div>
     </div>
   );

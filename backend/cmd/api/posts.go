@@ -71,16 +71,39 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) {
+	var posts []store.ListPostsByNewestRow
+	var err error
 	pagination := parsePagination(r)
 	hasCursor := !pagination.Cursor.IsZero()
 
-	posts, err := app.db.ListPosts(r.Context(), store.ListPostsParams{
-		Limit: int32(pagination.Limit),
-		Cursor: pgtype.Timestamp{
-			Time:  pagination.Cursor,
-			Valid: hasCursor,
-		},
-	})
+	sortOrder := r.URL.Query().Get("sort")
+	if sortOrder == "" {
+		sortOrder = "desc"
+	}
+
+	if sortOrder == "asc" {
+		oldestPost, dbErr := app.db.ListPostsByOldest(r.Context(), store.ListPostsByOldestParams{
+			Limit: int32(pagination.Limit),
+			Cursor: pgtype.Timestamp{
+				Time:  pagination.Cursor,
+				Valid: hasCursor,
+			},
+		})
+		err = dbErr
+
+		for _, p := range oldestPost {
+			posts = append(posts, store.ListPostsByNewestRow(p))
+		}
+	} else {
+
+		posts, err = app.db.ListPostsByNewest(r.Context(), store.ListPostsByNewestParams{
+			Limit: int32(pagination.Limit),
+			Cursor: pgtype.Timestamp{
+				Time:  pagination.Cursor,
+				Valid: hasCursor,
+			},
+		})
+	}
 	if err != nil {
 		log.Printf("DB Error in listPostHandler: %v", err)
 		writeJSONError(w, http.StatusBadRequest, "Failed to list posts")
@@ -88,7 +111,7 @@ func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	// if no posts exist, make sure to return empty array instead of null
 	if posts == nil {
-		posts = []store.ListPostsRow{}
+		posts = []store.ListPostsByNewestRow{}
 	}
 	writeJSON(w, http.StatusOK, posts)
 }

@@ -52,7 +52,7 @@ func (q *Queries) CreateComments(ctx context.Context, arg CreateCommentsParams) 
 	return i, err
 }
 
-const listComments = `-- name: ListComments :many
+const listCommentsByNewest = `-- name: ListCommentsByNewest :many
 SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at, users.id AS author_id, users.name AS author_name,
     (SELECT COUNT(*) FROM comments AS replies WHERE replies.parent_id = comments.id) AS reply_count
 FROM comments
@@ -68,14 +68,14 @@ ORDER BY comments.created_at DESC
 LIMIT $2
 `
 
-type ListCommentsParams struct {
+type ListCommentsByNewestParams struct {
 	PostID   uuid.UUID        `json:"post_id"`
 	Limit    int32            `json:"limit"`
 	ParentID pgtype.UUID      `json:"parent_id"`
 	Cursor   pgtype.Timestamp `json:"cursor"`
 }
 
-type ListCommentsRow struct {
+type ListCommentsByNewestRow struct {
 	ID         uuid.UUID   `json:"id"`
 	ParentID   pgtype.UUID `json:"parent_id"`
 	Content    string      `json:"content"`
@@ -86,8 +86,8 @@ type ListCommentsRow struct {
 	ReplyCount int64       `json:"reply_count"`
 }
 
-func (q *Queries) ListComments(ctx context.Context, arg ListCommentsParams) ([]ListCommentsRow, error) {
-	rows, err := q.db.Query(ctx, listComments,
+func (q *Queries) ListCommentsByNewest(ctx context.Context, arg ListCommentsByNewestParams) ([]ListCommentsByNewestRow, error) {
+	rows, err := q.db.Query(ctx, listCommentsByNewest,
 		arg.PostID,
 		arg.Limit,
 		arg.ParentID,
@@ -97,9 +97,77 @@ func (q *Queries) ListComments(ctx context.Context, arg ListCommentsParams) ([]L
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListCommentsRow
+	var items []ListCommentsByNewestRow
 	for rows.Next() {
-		var i ListCommentsRow
+		var i ListCommentsByNewestRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ParentID,
+			&i.Content,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AuthorID,
+			&i.AuthorName,
+			&i.ReplyCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCommentsByOldest = `-- name: ListCommentsByOldest :many
+SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at, users.id AS author_id, users.name AS author_name,
+    (SELECT COUNT(*) FROM comments AS replies WHERE replies.parent_id = comments.id) AS reply_count
+FROM comments
+JOIN users ON comments.user_id = users.id
+WHERE comments.post_id = $1
+AND(
+($3::uuid IS NULL AND comments.parent_id IS NULL)
+OR
+(comments.parent_id = $3)
+)
+AND ($4::timestamp IS NULL OR comments.created_at > $4)
+ORDER BY comments.created_at ASC
+LIMIT $2
+`
+
+type ListCommentsByOldestParams struct {
+	PostID   uuid.UUID        `json:"post_id"`
+	Limit    int32            `json:"limit"`
+	ParentID pgtype.UUID      `json:"parent_id"`
+	Cursor   pgtype.Timestamp `json:"cursor"`
+}
+
+type ListCommentsByOldestRow struct {
+	ID         uuid.UUID   `json:"id"`
+	ParentID   pgtype.UUID `json:"parent_id"`
+	Content    string      `json:"content"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
+	AuthorID   uuid.UUID   `json:"author_id"`
+	AuthorName string      `json:"author_name"`
+	ReplyCount int64       `json:"reply_count"`
+}
+
+func (q *Queries) ListCommentsByOldest(ctx context.Context, arg ListCommentsByOldestParams) ([]ListCommentsByOldestRow, error) {
+	rows, err := q.db.Query(ctx, listCommentsByOldest,
+		arg.PostID,
+		arg.Limit,
+		arg.ParentID,
+		arg.Cursor,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCommentsByOldestRow
+	for rows.Next() {
+		var i ListCommentsByOldestRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ParentID,

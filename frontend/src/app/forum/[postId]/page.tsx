@@ -8,6 +8,7 @@ import { CommentSection } from "../_components/comment-section";
 
 interface PostDetailPageProps {
   params: Promise<{ postId: string }>;
+  searchParams: Promise<{ sort?: "desc" | "asc" }>;
 }
 
 interface PostDetail {
@@ -41,11 +42,16 @@ async function getPostByID(postId: string): Promise<PostDetail | null> {
   }
 }
 
-export default async function PostDetailPage({ params }: PostDetailPageProps) {
+export default async function PostDetailPage({
+  params,
+  searchParams,
+}: PostDetailPageProps) {
   const user = await getSession();
   if (!user) redirect("sign-in");
-
   const { postId } = await params;
+  const { sort: sortQuery } = await searchParams;
+
+  const sort = sortQuery === "asc" ? "asc" : "desc";
   const post = await getPostByID(postId);
 
   if (!post) {
@@ -95,7 +101,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 
         <CreateCommentForm postId={postId} />
 
-        <CommentSection postId={postId} />
+        <CommentSection postId={postId} initialSort={sort} />
       </div>
     </div>
   );

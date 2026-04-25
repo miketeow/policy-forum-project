@@ -84,6 +84,10 @@ func (app *application) createCommentHandler(w http.ResponseWriter, r *http.Requ
 }
 
 func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Request) {
+	// declare master slice
+	var comments []store.ListCommentsByNewestRow
+	var err error
+
 	postIDParam := r.PathValue("postId")
 	postId, err := uuid.Parse(postIDParam)
 	if err != nil {
@@ -109,16 +113,38 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	// call db method
-	comments, err := app.db.ListComments(r.Context(), store.ListCommentsParams{
-		PostID:   postId,
-		Limit:    int32(pagination.Limit),
-		ParentID: nullParentID,
-		Cursor: pgtype.Timestamp{
-			Time:  pagination.Cursor,
-			Valid: hasCursor,
-		},
-	})
+	// get the sort parameter
+	sortOrder := r.URL.Query().Get("sort")
+	if sortOrder == "" {
+		sortOrder = "desc"
+	}
+
+	// the switch
+	if sortOrder == "asc" {
+		oldestComments, dbErr := app.db.ListCommentsByOldest(r.Context(), store.ListCommentsByOldestParams{
+			PostID:   postId,
+			Limit:    int32(pagination.Limit),
+			ParentID: nullParentID,
+			Cursor:   pgtype.Timestamp{Time: pagination.Cursor, Valid: hasCursor},
+		})
+		err = dbErr
+		// convert the type
+		for _, c := range oldestComments {
+			comments = append(comments, store.ListCommentsByNewestRow(c))
+		}
+	} else {
+
+		// call db method
+		comments, err = app.db.ListCommentsByNewest(r.Context(), store.ListCommentsByNewestParams{
+			PostID:   postId,
+			Limit:    int32(pagination.Limit),
+			ParentID: nullParentID,
+			Cursor: pgtype.Timestamp{
+				Time:  pagination.Cursor,
+				Valid: hasCursor,
+			},
+		})
+	}
 
 	if err != nil {
 		log.Printf("Failed to fetch comments: %v", err)
@@ -128,7 +154,7 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 
 	// preventing null to the frontend, return empty array instead
 	if comments == nil {
-		comments = []store.ListCommentsRow{}
+		comments = []store.ListCommentsByNewestRow{}
 	}
 
 	writeJSON(w, http.StatusOK, comments)

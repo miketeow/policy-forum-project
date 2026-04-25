@@ -9,11 +9,20 @@ FROM posts
 JOIN users ON posts.user_id = users.id
 WHERE posts.id = $1 LIMIT 1;
 
--- name: ListPosts :many
+-- name: ListPostsByNewest :many
 SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name
 FROM posts
 JOIN users ON posts.user_id = users.id
 WHERE (sqlc.narg('category')::post_category IS NULL OR posts.category = sqlc.narg('category'))
 AND (sqlc.narg('cursor')::timestamp IS NULL OR posts.created_at < sqlc.narg('cursor'))
 ORDER BY posts.created_at DESC
+LIMIT $1;
+
+-- name: ListPostsByOldest :many
+SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name
+FROM posts
+JOIN users ON posts.user_id = users.id
+WHERE (sqlc.narg('category')::post_category IS NULL OR posts.category = sqlc.narg('category'))
+AND (sqlc.narg('cursor')::timestamp IS NULL OR posts.created_at > sqlc.narg('cursor'))
+ORDER BY posts.created_at ASC
 LIMIT $1;

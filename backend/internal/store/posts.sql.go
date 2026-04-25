@@ -86,7 +86,7 @@ func (q *Queries) GetPostByID(ctx context.Context, id uuid.UUID) (GetPostByIDRow
 	return i, err
 }
 
-const listPosts = `-- name: ListPosts :many
+const listPostsByNewest = `-- name: ListPostsByNewest :many
 SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name
 FROM posts
 JOIN users ON posts.user_id = users.id
@@ -96,13 +96,13 @@ ORDER BY posts.created_at DESC
 LIMIT $1
 `
 
-type ListPostsParams struct {
+type ListPostsByNewestParams struct {
 	Limit    int32            `json:"limit"`
 	Category NullPostCategory `json:"category"`
 	Cursor   pgtype.Timestamp `json:"cursor"`
 }
 
-type ListPostsRow struct {
+type ListPostsByNewestRow struct {
 	ID         uuid.UUID    `json:"id"`
 	Title      string       `json:"title"`
 	Category   PostCategory `json:"category"`
@@ -110,15 +110,65 @@ type ListPostsRow struct {
 	AuthorName string       `json:"author_name"`
 }
 
-func (q *Queries) ListPosts(ctx context.Context, arg ListPostsParams) ([]ListPostsRow, error) {
-	rows, err := q.db.Query(ctx, listPosts, arg.Limit, arg.Category, arg.Cursor)
+func (q *Queries) ListPostsByNewest(ctx context.Context, arg ListPostsByNewestParams) ([]ListPostsByNewestRow, error) {
+	rows, err := q.db.Query(ctx, listPostsByNewest, arg.Limit, arg.Category, arg.Cursor)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPostsRow
+	var items []ListPostsByNewestRow
 	for rows.Next() {
-		var i ListPostsRow
+		var i ListPostsByNewestRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Category,
+			&i.CreatedAt,
+			&i.AuthorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPostsByOldest = `-- name: ListPostsByOldest :many
+SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name
+FROM posts
+JOIN users ON posts.user_id = users.id
+WHERE ($2::post_category IS NULL OR posts.category = $2)
+AND ($3::timestamp IS NULL OR posts.created_at > $3)
+ORDER BY posts.created_at ASC
+LIMIT $1
+`
+
+type ListPostsByOldestParams struct {
+	Limit    int32            `json:"limit"`
+	Category NullPostCategory `json:"category"`
+	Cursor   pgtype.Timestamp `json:"cursor"`
+}
+
+type ListPostsByOldestRow struct {
+	ID         uuid.UUID    `json:"id"`
+	Title      string       `json:"title"`
+	Category   PostCategory `json:"category"`
+	CreatedAt  time.Time    `json:"created_at"`
+	AuthorName string       `json:"author_name"`
+}
+
+func (q *Queries) ListPostsByOldest(ctx context.Context, arg ListPostsByOldestParams) ([]ListPostsByOldestRow, error) {
+	rows, err := q.db.Query(ctx, listPostsByOldest, arg.Limit, arg.Category, arg.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPostsByOldestRow
+	for rows.Next() {
+		var i ListPostsByOldestRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
