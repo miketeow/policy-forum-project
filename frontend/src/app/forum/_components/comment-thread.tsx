@@ -1,11 +1,22 @@
 "use client";
 
-import { createCommentAction } from "@/app/actions/forum";
+import {
+  createCommentAction,
+  deleteCommentAction,
+  updateCommentAction,
+} from "@/app/actions/forum";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchComments } from "@/lib/api-comments";
 import { formatDate } from "@/lib/utils";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { MoreVertical } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -22,15 +33,22 @@ export interface CommentNode {
 export function CommentThread({
   comment,
   postId,
+  currentUserId,
 }: {
   comment: CommentNode;
   postId: string;
+  currentUserId: string;
 }) {
   const [isReplying, setIsReplying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showReply, setShowReply] = useState(false);
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(comment.content);
+  const [isPending, setIsPending] = useState(false);
+
   const queryClient = useQueryClient();
+  const isOwner = currentUserId === comment.author_id;
 
   const { data, status, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
@@ -68,18 +86,92 @@ export function CommentThread({
     setIsSubmitting(false);
   }
 
+  async function handleEditSubmit() {
+    setIsPending(true);
+    const res = await updateCommentAction(comment.id, editContent, postId);
+    if (res.success) {
+      toast.success(res.message);
+      setIsEditing(false);
+      queryClient.invalidateQueries({
+        queryKey: ["comments", postId, comment.parent_id || "root"],
+      });
+    } else {
+      toast.error(res.error);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm("Are you sure want to delete this comment?")) return;
+    const res = await deleteCommentAction(comment.id, postId);
+    if (res.success) {
+      toast.success(res.message);
+      queryClient.invalidateQueries({
+        queryKey: ["comments", postId, comment.parent_id || "root"],
+      });
+    } else {
+      toast.error(res.error);
+    }
+  }
+
   return (
     <div className="flex flex-col mt-4">
       {/*comment box*/}
       <div className="flex flex-col gap-2 p-4 rounded-lg bg-card border shadow-sm">
         <div className="flex justify-between items-center">
-          <span className="font-semibold text-sm">{comment.author_name}</span>
-          <span className="text-xs text-muted-foreground">
-            {formatDate(comment.created_at)}
-          </span>
+          <div>
+            <span className="font-semibold text-sm">{comment.author_name}</span>
+            <span className="text-xs text-muted-foreground">
+              {formatDate(comment.created_at)}
+            </span>
+          </div>
+
+          {isOwner && (
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-8">
+                  <MoreVertical size={16} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleDelete}
+                  className="text-destructive"
+                >
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
-        <p className="text-sm whitespace-pre-wrap mt-1">{comment.content}</p>
+        {/*content area: swap between text and form*/}
+        {isEditing ? (
+          <div className="flex flex-col gap-2 mt-2">
+            <Textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="text-sm min-h-20"
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsEditing(false)}
+              >
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleEditSubmit} disabled={isPending}>
+                {isPending ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm whitespace-pre-wrap mt-1">{comment.content}</p>
+        )}
+
         <div className="mt-2 flex gap-4">
           <Button
             variant="ghost"
@@ -141,6 +233,7 @@ export function CommentThread({
                     comment={reply}
                     postId={postId}
                     key={reply.id}
+                    currentUserId={currentUserId}
                   />
                 ))}
               </div>

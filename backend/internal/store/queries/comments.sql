@@ -32,3 +32,13 @@ OR
 AND (sqlc.narg('cursor')::timestamp IS NULL OR comments.created_at > sqlc.narg('cursor'))
 ORDER BY comments.created_at ASC
 LIMIT $2;
+
+-- name: UpdateComment :one
+UPDATE comments
+SET content = $3, updated_at = $4
+WHERE id = $1 AND user_id = $2
+RETURNING *;
+
+-- name: DeleteComment :exec
+DELETE FROM comments
+WHERE id = $1 AND user_id = $2;

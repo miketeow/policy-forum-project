@@ -18,6 +18,12 @@ type CreatePostReqeust struct {
 	Category string `json:"category"`
 }
 
+type UpdatePostReqeust struct {
+	Title    string `json:"title"`
+	Content  string `json:"content"`
+	Category string `json:"category"`
+}
+
 type PaginationRequest struct {
 	Limit  int
 	Cursor time.Time
@@ -137,6 +143,73 @@ func (app *application) getPostHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(post)
+}
+
+func (app *application) updatePostHandler(w http.ResponseWriter, r *http.Request) {
+	postIDParam := r.PathValue("postId")
+	postId, err := uuid.Parse(postIDParam)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid post ID format")
+		return
+	}
+
+	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req UpdatePostReqeust
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	updatedPost, err := app.db.UpdatePost(r.Context(), store.UpdatePostParams{
+		ID:        postId,
+		UserID:    userID,
+		Title:     req.Title,
+		Content:   req.Content,
+		Category:  store.PostCategory(req.Category),
+		UpdatedAt: time.Now().UTC(),
+	})
+
+	if err != nil {
+		log.Printf("Failed to update post: %v", err)
+		writeJSONError(w, http.StatusForbidden, "Not authorized to edit this post, or post does not exist")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, updatedPost)
+
+}
+
+func (app *application) deletePostHandler(w http.ResponseWriter, r *http.Request) {
+	postIDParam := r.PathValue("postId")
+	postId, err := uuid.Parse(postIDParam)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid post ID format")
+		return
+	}
+
+	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	err = app.db.DeletePost(r.Context(), store.DeletePostParams{
+		ID:     postId,
+		UserID: userID,
+	})
+
+	if err != nil {
+		log.Printf("Failed to delete post: %v", err)
+		writeJSONError(w, http.StatusForbidden, "Not authorized to delete this post, or post does not exist")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func parsePagination(r *http.Request) PaginationRequest {

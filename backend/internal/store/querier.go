@@ -14,6 +14,8 @@ type Querier interface {
 	CreateComments(ctx context.Context, arg CreateCommentsParams) (Comment, error)
 	CreatePost(ctx context.Context, arg CreatePostParams) (Post, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	DeleteComment(ctx context.Context, arg DeleteCommentParams) error
+	DeletePost(ctx context.Context, arg DeletePostParams) error
 	GetPostByID(ctx context.Context, id uuid.UUID) (GetPostByIDRow, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
@@ -21,6 +23,8 @@ type Querier interface {
 	ListCommentsByOldest(ctx context.Context, arg ListCommentsByOldestParams) ([]ListCommentsByOldestRow, error)
 	ListPostsByNewest(ctx context.Context, arg ListPostsByNewestParams) ([]ListPostsByNewestRow, error)
 	ListPostsByOldest(ctx context.Context, arg ListPostsByOldestParams) ([]ListPostsByOldestRow, error)
+	UpdateComment(ctx context.Context, arg UpdateCommentParams) (Comment, error)
+	UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, error)
 }
 
 var _ Querier = (*Queries)(nil)

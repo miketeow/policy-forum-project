@@ -16,6 +16,10 @@ type CreateCommentRequest struct {
 	ParentID *uuid.UUID `json:"parent_id,omitempty"`
 }
 
+type UpdateCommentRequest struct {
+	Content string `json:"content"`
+}
+
 func (app *application) createCommentHandler(w http.ResponseWriter, r *http.Request) {
 	postIDParam := r.PathValue("postId")
 	postId, err := uuid.Parse(postIDParam)
@@ -158,4 +162,69 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, http.StatusOK, comments)
+}
+func (app *application) updateCommentHandler(w http.ResponseWriter, r *http.Request) {
+
+	commentIDParam := r.PathValue("commentId")
+	commentId, err := uuid.Parse(commentIDParam)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid comment ID format")
+		return
+	}
+
+	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req UpdateCommentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	updatedComment, err := app.db.UpdateComment(r.Context(), store.UpdateCommentParams{
+		ID:        commentId,
+		UserID:    userID,
+		Content:   req.Content,
+		UpdatedAt: time.Now().UTC(),
+	})
+
+	if err != nil {
+		log.Printf("Failed to update comment: %v", err)
+		writeJSONError(w, http.StatusForbidden, "Not authorized to edit this comment, or comment does not exist")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, updatedComment)
+}
+
+func (app *application) deleteCommentHandler(w http.ResponseWriter, r *http.Request) {
+
+	commentIDParam := r.PathValue("commentId")
+	commentId, err := uuid.Parse(commentIDParam)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid comment ID format")
+		return
+	}
+
+	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	err = app.db.DeleteComment(r.Context(), store.DeleteCommentParams{
+		ID:     commentId,
+		UserID: userID,
+	})
+
+	if err != nil {
+		log.Printf("Failed to delete comment: %v", err)
+		writeJSONError(w, http.StatusForbidden, "Not authorized to delete this comment, or comment does not exist")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

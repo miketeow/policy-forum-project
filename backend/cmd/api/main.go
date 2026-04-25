@@ -66,6 +66,11 @@ func main() {
 	mux.HandleFunc("POST /api/posts/{postId}/comments", app.requireAuth(app.createCommentHandler))
 	mux.HandleFunc("GET /api/posts/{postId}/comments", app.getCommentsHandler)
 
+	mux.HandleFunc("PUT /api/posts/{postId}", app.requireAuth(app.updatePostHandler))
+	mux.HandleFunc("DELETE /api/posts/{postId}", app.requireAuth(app.deletePostHandler))
+
+	mux.HandleFunc("PUT /api/comments/{commentId}", app.requireAuth(app.updateCommentHandler))
+	mux.HandleFunc("DELETE /api/comments/{commentId}", app.requireAuth(app.deleteCommentHandler))
 	handlerWithCORS := corsMiddleware(mux)
 
 	// Configure the HTTP server with strict timeout

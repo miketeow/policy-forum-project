@@ -52,6 +52,21 @@ func (q *Queries) CreateComments(ctx context.Context, arg CreateCommentsParams) 
 	return i, err
 }
 
+const deleteComment = `-- name: DeleteComment :exec
+DELETE FROM comments
+WHERE id = $1 AND user_id = $2
+`
+
+type DeleteCommentParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeleteComment(ctx context.Context, arg DeleteCommentParams) error {
+	_, err := q.db.Exec(ctx, deleteComment, arg.ID, arg.UserID)
+	return err
+}
+
 const listCommentsByNewest = `-- name: ListCommentsByNewest :many
 SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at, users.id AS author_id, users.name AS author_name,
     (SELECT COUNT(*) FROM comments AS replies WHERE replies.parent_id = comments.id) AS reply_count
@@ -186,4 +201,38 @@ func (q *Queries) ListCommentsByOldest(ctx context.Context, arg ListCommentsByOl
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateComment = `-- name: UpdateComment :one
+UPDATE comments
+SET content = $3, updated_at = $4
+WHERE id = $1 AND user_id = $2
+RETURNING id, post_id, user_id, content, created_at, updated_at, parent_id
+`
+
+type UpdateCommentParams struct {
+	ID        uuid.UUID `json:"id"`
+	UserID    uuid.UUID `json:"user_id"`
+	Content   string    `json:"content"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (q *Queries) UpdateComment(ctx context.Context, arg UpdateCommentParams) (Comment, error) {
+	row := q.db.QueryRow(ctx, updateComment,
+		arg.ID,
+		arg.UserID,
+		arg.Content,
+		arg.UpdatedAt,
+	)
+	var i Comment
+	err := row.Scan(
+		&i.ID,
+		&i.PostID,
+		&i.UserID,
+		&i.Content,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ParentID,
+	)
+	return i, err
 }

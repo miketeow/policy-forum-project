@@ -26,9 +26,11 @@ export interface CommentsDetail {
 export function CommentSection({
   postId,
   initialSort,
+  currentUserId,
 }: {
   postId: string;
   initialSort: "desc" | "asc";
+  currentUserId: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -100,6 +102,7 @@ export function CommentSection({
                   key={comment.id}
                   comment={comment}
                   postId={postId}
+                  currentUserId={currentUserId}
                 />
               ))}
             </div>

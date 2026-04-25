@@ -52,6 +52,21 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 	return i, err
 }
 
+const deletePost = `-- name: DeletePost :exec
+DELETE FROM posts
+WHERE id = $1 AND user_id = $2
+`
+
+type DeletePostParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) DeletePost(ctx context.Context, arg DeletePostParams) error {
+	_, err := q.db.Exec(ctx, deletePost, arg.ID, arg.UserID)
+	return err
+}
+
 const getPostByID = `-- name: GetPostByID :one
 SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, users.id AS author_id, users.name AS author_name
 FROM posts
@@ -184,4 +199,42 @@ func (q *Queries) ListPostsByOldest(ctx context.Context, arg ListPostsByOldestPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const updatePost = `-- name: UpdatePost :one
+UPDATE posts
+SET title = $3, content = $4, category = $5, updated_at = $6
+WHERE id = $1 AND user_id = $2
+RETURNING id, user_id, title, content, category, created_at, updated_at
+`
+
+type UpdatePostParams struct {
+	ID        uuid.UUID    `json:"id"`
+	UserID    uuid.UUID    `json:"user_id"`
+	Title     string       `json:"title"`
+	Content   string       `json:"content"`
+	Category  PostCategory `json:"category"`
+	UpdatedAt time.Time    `json:"updated_at"`
+}
+
+func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, error) {
+	row := q.db.QueryRow(ctx, updatePost,
+		arg.ID,
+		arg.UserID,
+		arg.Title,
+		arg.Content,
+		arg.Category,
+		arg.UpdatedAt,
+	)
+	var i Post
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Content,
+		&i.Category,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

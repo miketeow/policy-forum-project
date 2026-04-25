@@ -138,3 +138,63 @@ export async function createCommentAction(
     };
   }
 }
+
+export async function updateCommentAction(
+  commentId: string,
+  content: string,
+  postId: string,
+): Promise<ActionState> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+  if (!token) {
+    return {
+      success: false,
+      message: "Unauthorized",
+      error: "Unauthorized",
+    };
+  }
+
+  try {
+    const res = await fetch(`http://localhost:8080/api/comments/${commentId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ content }),
+    });
+
+    if (!res.ok) throw new Error("Failed to update comment");
+    revalidatePath(`/forum/${postId}`);
+    return { success: true, message: "Comment updated", error: "" };
+  } catch (error) {
+    return { success: false, message: "Error", error: `${error}` };
+  }
+}
+
+export async function deleteCommentAction(
+  commentId: string,
+  postId: string,
+): Promise<ActionState> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+  if (!token) {
+    return {
+      success: false,
+      message: "Unauthorized",
+      error: "Unauthorized",
+    };
+  }
+
+  try {
+    const res = await fetch(`http://localhost:8080/api/comments/${commentId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Failed to delete comment");
+    revalidatePath(`/forum/${postId}`);
+    return { success: true, message: "Comment deleted", error: "" };
+  } catch (error) {
+    return { success: false, message: "Error", error: `${error}` };
+  }
+}

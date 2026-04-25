@@ -26,3 +26,13 @@ WHERE (sqlc.narg('category')::post_category IS NULL OR posts.category = sqlc.nar
 AND (sqlc.narg('cursor')::timestamp IS NULL OR posts.created_at > sqlc.narg('cursor'))
 ORDER BY posts.created_at ASC
 LIMIT $1;
+
+-- name: UpdatePost :one
+UPDATE posts
+SET title = $3, content = $4, category = $5, updated_at = $6
+WHERE id = $1 AND user_id = $2
+RETURNING *;
+
+-- name: DeletePost :exec
+DELETE FROM posts
+WHERE id = $1 AND user_id = $2;

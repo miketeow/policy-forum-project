@@ -101,7 +101,11 @@ export default async function PostDetailPage({
 
         <CreateCommentForm postId={postId} />
 
-        <CommentSection postId={postId} initialSort={sort} />
+        <CommentSection
+          postId={postId}
+          initialSort={sort}
+          currentUserId={user.id}
+        />
       </div>
     </div>
   );
