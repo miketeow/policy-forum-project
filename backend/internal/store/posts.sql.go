@@ -102,7 +102,7 @@ func (q *Queries) GetPostByID(ctx context.Context, id uuid.UUID) (GetPostByIDRow
 }
 
 const listPostsByNewest = `-- name: ListPostsByNewest :many
-SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name
+SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name, users.id AS author_id
 FROM posts
 JOIN users ON posts.user_id = users.id
 WHERE ($2::post_category IS NULL OR posts.category = $2)
@@ -123,6 +123,7 @@ type ListPostsByNewestRow struct {
 	Category   PostCategory `json:"category"`
 	CreatedAt  time.Time    `json:"created_at"`
 	AuthorName string       `json:"author_name"`
+	AuthorID   uuid.UUID    `json:"author_id"`
 }
 
 func (q *Queries) ListPostsByNewest(ctx context.Context, arg ListPostsByNewestParams) ([]ListPostsByNewestRow, error) {
@@ -140,6 +141,7 @@ func (q *Queries) ListPostsByNewest(ctx context.Context, arg ListPostsByNewestPa
 			&i.Category,
 			&i.CreatedAt,
 			&i.AuthorName,
+			&i.AuthorID,
 		); err != nil {
 			return nil, err
 		}
@@ -152,7 +154,7 @@ func (q *Queries) ListPostsByNewest(ctx context.Context, arg ListPostsByNewestPa
 }
 
 const listPostsByOldest = `-- name: ListPostsByOldest :many
-SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name
+SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name, users.id AS author_id
 FROM posts
 JOIN users ON posts.user_id = users.id
 WHERE ($2::post_category IS NULL OR posts.category = $2)
@@ -173,6 +175,7 @@ type ListPostsByOldestRow struct {
 	Category   PostCategory `json:"category"`
 	CreatedAt  time.Time    `json:"created_at"`
 	AuthorName string       `json:"author_name"`
+	AuthorID   uuid.UUID    `json:"author_id"`
 }
 
 func (q *Queries) ListPostsByOldest(ctx context.Context, arg ListPostsByOldestParams) ([]ListPostsByOldestRow, error) {
@@ -190,6 +193,7 @@ func (q *Queries) ListPostsByOldest(ctx context.Context, arg ListPostsByOldestPa
 			&i.Category,
 			&i.CreatedAt,
 			&i.AuthorName,
+			&i.AuthorID,
 		); err != nil {
 			return nil, err
 		}

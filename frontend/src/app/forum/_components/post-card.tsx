@@ -17,6 +17,7 @@ export interface Post {
   category: string;
   created_at: string;
   author_name: string;
+  author_id: string;
 }
 
 export function PostCard({ post }: { post: Post }) {

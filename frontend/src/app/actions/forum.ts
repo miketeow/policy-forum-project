@@ -9,7 +9,6 @@ export interface ActionState {
 }
 
 export async function createPostAction(
-  prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   const title = formData.get("title");
@@ -59,6 +58,107 @@ export async function createPostAction(
 
     revalidatePath("/forum");
     return { success: true, message: "Create post successfully", error: "" };
+  } catch (error) {
+    return {
+      success: false,
+      message: "Failed to connect to the server",
+      error: `${error}`,
+    };
+  }
+}
+
+export async function updatePostAction(
+  postId: string,
+  formData: FormData,
+): Promise<ActionState> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+
+  if (!token) {
+    return {
+      success: false,
+      message: "Please log in",
+      error: "Unauthorized. Please log in.",
+    };
+  }
+
+  const title = formData.get("title");
+  const content = formData.get("content");
+
+  if (!title || !content) {
+    return {
+      success: false,
+      message: "Please try again",
+      error: "Title and content are required",
+    };
+  }
+
+  try {
+    // server to server
+    const response = await fetch(`http://localhost:8080/api/posts/${postId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        title,
+        content,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        success: false,
+        message: "Backend error",
+        error: `${errorText}`,
+      };
+    }
+
+    revalidatePath(`/forum/${postId}`);
+    revalidatePath(`/forum`);
+    return { success: true, message: "Post updated successfully", error: "" };
+  } catch (error) {
+    return {
+      success: false,
+      message: "Failed to connect to the server",
+      error: `${error}`,
+    };
+  }
+}
+
+export async function deletePostAction(postId: string): Promise<ActionState> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+
+  if (!token) {
+    return {
+      success: false,
+      message: "Please log in",
+      error: "Unauthorized. Please log in.",
+    };
+  }
+
+  try {
+    const res = await fetch(`http://localhost:8080/api/posts/${postId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      return {
+        success: false,
+        message: "Backend error",
+        error: `${errorText}`,
+      };
+    }
+
+    revalidatePath(`/forum`);
+    return { success: true, message: "Post deleted successfully", error: "" };
   } catch (error) {
     return {
       success: false,

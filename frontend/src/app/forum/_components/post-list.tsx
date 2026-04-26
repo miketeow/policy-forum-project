@@ -3,7 +3,6 @@
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { Post, PostCard } from "./post-card";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,

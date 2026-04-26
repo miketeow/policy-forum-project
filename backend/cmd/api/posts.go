@@ -165,12 +165,18 @@ func (app *application) updatePostHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	category := req.Category
+
+	if category == "" {
+		category = "PENDING"
+	}
+
 	updatedPost, err := app.db.UpdatePost(r.Context(), store.UpdatePostParams{
 		ID:        postId,
 		UserID:    userID,
 		Title:     req.Title,
 		Content:   req.Content,
-		Category:  store.PostCategory(req.Category),
+		Category:  store.PostCategory(category),
 		UpdatedAt: time.Now().UTC(),
 	})
 

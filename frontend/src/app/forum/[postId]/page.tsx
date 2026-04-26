@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { CreateCommentForm } from "../_components/create-comment-form";
 import { BreadcrumbNav } from "../_components/breadcumb-nav";
 import { CommentSection } from "../_components/comment-section";
+import { PostAction } from "../_components/post-actions";
 
 interface PostDetailPageProps {
   params: Promise<{ postId: string }>;
@@ -70,15 +71,27 @@ export default async function PostDetailPage({
     { label: post.title },
   ];
 
+  const isOwner = user.id === post.author_id;
+
   return (
     <div className="flex flex-col mx-auto w-full max-w-3xl px-4 gap-8 py-8">
       <BreadcrumbNav items={breadcrumbs} />
       <div>
-        <div className="flex items-center gap-2 mb-4">
-          <Badge>{post.category}</Badge>
-          <span className="text-sm text-muted-foreground">
-            {formatDate(post.created_at)}
-          </span>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Badge>{post.category}</Badge>
+            <span className="text-sm text-muted-foreground">
+              {formatDate(post.created_at)}
+            </span>
+          </div>
+
+          {isOwner && (
+            <PostAction
+              postId={post.id}
+              initialTitle={post.title}
+              initialContent={post.content}
+            />
+          )}
         </div>
 
         <h1 className="text-3xl font-bold tracking-tight mb-2">{post.title}</h1>

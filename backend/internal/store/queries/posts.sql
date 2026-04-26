@@ -10,7 +10,7 @@ JOIN users ON posts.user_id = users.id
 WHERE posts.id = $1 LIMIT 1;
 
 -- name: ListPostsByNewest :many
-SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name
+SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name, users.id AS author_id
 FROM posts
 JOIN users ON posts.user_id = users.id
 WHERE (sqlc.narg('category')::post_category IS NULL OR posts.category = sqlc.narg('category'))
@@ -19,7 +19,7 @@ ORDER BY posts.created_at DESC
 LIMIT $1;
 
 -- name: ListPostsByOldest :many
-SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name
+SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name, users.id AS author_id
 FROM posts
 JOIN users ON posts.user_id = users.id
 WHERE (sqlc.narg('category')::post_category IS NULL OR posts.category = sqlc.narg('category'))

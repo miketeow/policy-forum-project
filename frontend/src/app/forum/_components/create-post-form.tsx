@@ -9,31 +9,34 @@ import {
   InputGroupInput,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
-import { useActionState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
-const initialState = {
-  success: false,
-  message: "",
-  error: "",
-};
 export function CreatePostForm() {
-  const [state, formAction, isPending] = useActionState(
-    createPostAction,
-    initialState,
-  );
+  const queryClient = useQueryClient();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [isPending, setIsPending] = useState(false);
 
-  useEffect(() => {
-    if (state.error) {
-      toast.error(state.error);
-    } else if (state.success) {
-      toast.success(state.message);
+  async function handleSubmit(formData: FormData) {
+    setIsPending(true);
+    const res = await createPostAction(formData);
+
+    if (res.success) {
+      toast.success(res.message || "Discussion posted!");
+      formRef.current?.reset();
+
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+    } else {
+      toast.error(res.error);
     }
-  }, [state]);
+
+    setIsPending(false);
+  }
 
   return (
     <div className="rounded-lg p-6 shadow-sm bg-card text-card-foreground">
-      <form action={formAction}>
+      <form action={handleSubmit} ref={formRef}>
         <FieldGroup className="w-full">
           <Field>
             <FieldLabel className="text-lg font-semibold mb-2">
