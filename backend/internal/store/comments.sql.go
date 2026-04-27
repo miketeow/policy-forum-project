@@ -16,7 +16,7 @@ import (
 const createComments = `-- name: CreateComments :one
 INSERT INTO comments (id, post_id, user_id, parent_id,content, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, post_id, user_id, content, created_at, updated_at, parent_id
+RETURNING id, post_id, user_id, content, created_at, updated_at, parent_id, score
 `
 
 type CreateCommentsParams struct {
@@ -48,6 +48,7 @@ func (q *Queries) CreateComments(ctx context.Context, arg CreateCommentsParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ParentID,
+		&i.Score,
 	)
 	return i, err
 }
@@ -207,7 +208,7 @@ const updateComment = `-- name: UpdateComment :one
 UPDATE comments
 SET content = $3, updated_at = $4
 WHERE id = $1 AND user_id = $2
-RETURNING id, post_id, user_id, content, created_at, updated_at, parent_id
+RETURNING id, post_id, user_id, content, created_at, updated_at, parent_id, score
 `
 
 type UpdateCommentParams struct {
@@ -233,6 +234,7 @@ func (q *Queries) UpdateComment(ctx context.Context, arg UpdateCommentParams) (C
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ParentID,
+		&i.Score,
 	)
 	return i, err
 }

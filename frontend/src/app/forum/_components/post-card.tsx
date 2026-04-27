@@ -1,14 +1,10 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
+import { VoteButton } from "./vote-button";
 
 export interface Post {
   id: string;
@@ -18,6 +14,8 @@ export interface Post {
   created_at: string;
   author_name: string;
   author_id: string;
+  score: number;
+  user_vote: number;
 }
 
 export function PostCard({ post }: { post: Post }) {
@@ -42,12 +40,20 @@ export function PostCard({ post }: { post: Post }) {
             </span>
           </Link>
         </CardTitle>
-        <CardDescription className="mt-2">
-          Posted by{" "}
-          <span className="font-medium text-foreground">
-            {post.author_name}
-          </span>
-        </CardDescription>
+        <div className="mt-4 flex items-center justify-between relative z-10">
+          <div className="text-sm text-muted-foreground">
+            Posted by{" "}
+            <span className="font-medium text-foreground">
+              {post.author_name}
+            </span>
+          </div>
+
+          <VoteButton
+            postId={post.id}
+            initialScore={post.score}
+            initialUserVote={post.user_vote}
+          />
+        </div>
       </CardHeader>
     </Card>
   );

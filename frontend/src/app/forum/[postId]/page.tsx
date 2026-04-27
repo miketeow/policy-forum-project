@@ -6,6 +6,7 @@ import { CreateCommentForm } from "../_components/create-comment-form";
 import { BreadcrumbNav } from "../_components/breadcumb-nav";
 import { CommentSection } from "../_components/comment-section";
 import { PostAction } from "../_components/post-actions";
+import { VoteButton } from "../_components/vote-button";
 
 interface PostDetailPageProps {
   params: Promise<{ postId: string }>;
@@ -21,6 +22,8 @@ interface PostDetail {
   updated_at: string;
   author_id: string;
   author_name: string;
+  score: number;
+  user_vote: number;
 }
 
 async function getPostByID(postId: string): Promise<PostDetail | null> {
@@ -96,7 +99,7 @@ export default async function PostDetailPage({
 
         <h1 className="text-3xl font-bold tracking-tight mb-2">{post.title}</h1>
 
-        <p className="text-muted-foreground border-b pb-6">
+        <p className="text-muted-foreground">
           Posted by{" "}
           <span className="font-medium text-foreground">
             {post.author_name}
@@ -105,6 +108,14 @@ export default async function PostDetailPage({
 
         <div className="mt-6 text-base leading-relaxed whitespace-pre-wrap">
           {post.content}
+        </div>
+
+        <div className="flex items-center mt-6 border-b pb-6">
+          <VoteButton
+            postId={post.id}
+            initialScore={post.score}
+            initialUserVote={post.user_vote}
+          />
         </div>
       </div>
 

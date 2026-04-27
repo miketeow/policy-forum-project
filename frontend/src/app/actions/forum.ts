@@ -298,3 +298,45 @@ export async function deleteCommentAction(
     return { success: false, message: "Error", error: `${error}` };
   }
 }
+
+export async function votePostAction(
+  postId: string,
+  vote: 1 | -1,
+): Promise<ActionState> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+  if (!token) {
+    return {
+      success: false,
+      message: "Unauthorized",
+      error: "Unauthorized",
+    };
+  }
+
+  try {
+    const res = await fetch(`http://localhost:8080/api/posts/${postId}/vote`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ vote }),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      let parsedError = "Backend error";
+      try {
+        const errData = JSON.parse(errorText);
+        parsedError = errData.error || errorText;
+      } catch (e) {
+        parsedError = errorText;
+      }
+      return { success: false, message: parsedError, error: parsedError };
+    }
+
+    return { success: true, message: "Vote recorded", error: "" };
+  } catch (error) {
+    return { success: false, message: "Error", error: `${error}` };
+  }
+}

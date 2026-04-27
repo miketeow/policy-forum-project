@@ -19,6 +19,7 @@ import (
 type application struct {
 	jwtSecret []byte
 	db        *store.Queries
+	pool      *pgxpool.Pool
 }
 
 func main() {
@@ -45,6 +46,7 @@ func main() {
 	// Initialize the application atruct with the sqlc-generated store
 	app := &application{
 		db:        store.New(pool),
+		pool:      pool,
 		jwtSecret: []byte(jwtSecret),
 	}
 
@@ -71,6 +73,8 @@ func main() {
 
 	mux.HandleFunc("PUT /api/comments/{commentId}", app.requireAuth(app.updateCommentHandler))
 	mux.HandleFunc("DELETE /api/comments/{commentId}", app.requireAuth(app.deleteCommentHandler))
+
+	mux.HandleFunc("POST /api/posts/{postId}/vote", app.requireAuth(app.votePostHandler))
 	handlerWithCORS := corsMiddleware(mux)
 
 	// Configure the HTTP server with strict timeout

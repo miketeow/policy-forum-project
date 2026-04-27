@@ -68,6 +68,14 @@ type Comment struct {
 	CreatedAt time.Time   `json:"created_at"`
 	UpdatedAt time.Time   `json:"updated_at"`
 	ParentID  pgtype.UUID `json:"parent_id"`
+	Score     int32       `json:"score"`
+}
+
+type CommentVote struct {
+	CommentID uuid.UUID          `json:"comment_id"`
+	UserID    uuid.UUID          `json:"user_id"`
+	Vote      int16              `json:"vote"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type Post struct {
@@ -78,6 +86,14 @@ type Post struct {
 	Category  PostCategory `json:"category"`
 	CreatedAt time.Time    `json:"created_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
+	Score     int32        `json:"score"`
+}
+
+type PostVote struct {
+	PostID    uuid.UUID          `json:"post_id"`
+	UserID    uuid.UUID          `json:"user_id"`
+	Vote      int16              `json:"vote"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type User struct {

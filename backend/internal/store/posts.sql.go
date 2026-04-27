@@ -16,7 +16,7 @@ import (
 const createPost = `-- name: CreatePost :one
 INSERT INTO posts (id, user_id, title, content, category, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, user_id, title, content, category, created_at, updated_at
+RETURNING id, user_id, title, content, category, created_at, updated_at, score
 `
 
 type CreatePostParams struct {
@@ -48,6 +48,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 		&i.Category,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Score,
 	)
 	return i, err
 }
@@ -68,11 +69,19 @@ func (q *Queries) DeletePost(ctx context.Context, arg DeletePostParams) error {
 }
 
 const getPostByID = `-- name: GetPostByID :one
-SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, users.id AS author_id, users.name AS author_name
+SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, posts.score,
+    users.id AS author_id, users.name AS author_name,
+    COALESCE(pv.vote,0)::smallint AS user_vote
 FROM posts
 JOIN users ON posts.user_id = users.id
+LEFT JOIN post_votes pv ON pv.post_id = post_id AND pv.user_id = $2
 WHERE posts.id = $1 LIMIT 1
 `
+
+type GetPostByIDParams struct {
+	ID            uuid.UUID   `json:"id"`
+	CurrentUserID pgtype.UUID `json:"current_user_id"`
+}
 
 type GetPostByIDRow struct {
 	ID         uuid.UUID    `json:"id"`
@@ -81,12 +90,14 @@ type GetPostByIDRow struct {
 	Category   PostCategory `json:"category"`
 	CreatedAt  time.Time    `json:"created_at"`
 	UpdatedAt  time.Time    `json:"updated_at"`
+	Score      int32        `json:"score"`
 	AuthorID   uuid.UUID    `json:"author_id"`
 	AuthorName string       `json:"author_name"`
+	UserVote   int16        `json:"user_vote"`
 }
 
-func (q *Queries) GetPostByID(ctx context.Context, id uuid.UUID) (GetPostByIDRow, error) {
-	row := q.db.QueryRow(ctx, getPostByID, id)
+func (q *Queries) GetPostByID(ctx context.Context, arg GetPostByIDParams) (GetPostByIDRow, error) {
+	row := q.db.QueryRow(ctx, getPostByID, arg.ID, arg.CurrentUserID)
 	var i GetPostByIDRow
 	err := row.Scan(
 		&i.ID,
@@ -95,26 +106,48 @@ func (q *Queries) GetPostByID(ctx context.Context, id uuid.UUID) (GetPostByIDRow
 		&i.Category,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Score,
 		&i.AuthorID,
 		&i.AuthorName,
+		&i.UserVote,
 	)
 	return i, err
 }
 
+const getPostVote = `-- name: GetPostVote :one
+SELECT vote from post_votes WHERE post_id = $1 AND user_id = $2
+`
+
+type GetPostVoteParams struct {
+	PostID uuid.UUID `json:"post_id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetPostVote(ctx context.Context, arg GetPostVoteParams) (int16, error) {
+	row := q.db.QueryRow(ctx, getPostVote, arg.PostID, arg.UserID)
+	var vote int16
+	err := row.Scan(&vote)
+	return vote, err
+}
+
 const listPostsByNewest = `-- name: ListPostsByNewest :many
-SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name, users.id AS author_id
+SELECT posts.id, posts.title, posts.category, posts.created_at, posts.updated_at, posts.score,
+    users.name AS author_name, users.id AS author_id,
+    COALESCE(pv.vote,0)::smallint AS user_vote
 FROM posts
 JOIN users ON posts.user_id = users.id
-WHERE ($2::post_category IS NULL OR posts.category = $2)
-AND ($3::timestamp IS NULL OR posts.created_at < $3)
+LEFT JOIN post_votes pv ON pv.post_id = post_id AND pv.user_id = $2
+WHERE ($3::post_category IS NULL OR posts.category = $3)
+AND ($4::timestamp IS NULL OR posts.created_at < $4)
 ORDER BY posts.created_at DESC
 LIMIT $1
 `
 
 type ListPostsByNewestParams struct {
-	Limit    int32            `json:"limit"`
-	Category NullPostCategory `json:"category"`
-	Cursor   pgtype.Timestamp `json:"cursor"`
+	Limit         int32            `json:"limit"`
+	CurrentUserID pgtype.UUID      `json:"current_user_id"`
+	Category      NullPostCategory `json:"category"`
+	Cursor        pgtype.Timestamp `json:"cursor"`
 }
 
 type ListPostsByNewestRow struct {
@@ -122,12 +155,20 @@ type ListPostsByNewestRow struct {
 	Title      string       `json:"title"`
 	Category   PostCategory `json:"category"`
 	CreatedAt  time.Time    `json:"created_at"`
+	UpdatedAt  time.Time    `json:"updated_at"`
+	Score      int32        `json:"score"`
 	AuthorName string       `json:"author_name"`
 	AuthorID   uuid.UUID    `json:"author_id"`
+	UserVote   int16        `json:"user_vote"`
 }
 
 func (q *Queries) ListPostsByNewest(ctx context.Context, arg ListPostsByNewestParams) ([]ListPostsByNewestRow, error) {
-	rows, err := q.db.Query(ctx, listPostsByNewest, arg.Limit, arg.Category, arg.Cursor)
+	rows, err := q.db.Query(ctx, listPostsByNewest,
+		arg.Limit,
+		arg.CurrentUserID,
+		arg.Category,
+		arg.Cursor,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +181,11 @@ func (q *Queries) ListPostsByNewest(ctx context.Context, arg ListPostsByNewestPa
 			&i.Title,
 			&i.Category,
 			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
 			&i.AuthorName,
 			&i.AuthorID,
+			&i.UserVote,
 		); err != nil {
 			return nil, err
 		}
@@ -154,19 +198,23 @@ func (q *Queries) ListPostsByNewest(ctx context.Context, arg ListPostsByNewestPa
 }
 
 const listPostsByOldest = `-- name: ListPostsByOldest :many
-SELECT posts.id, posts.title, posts.category, posts.created_at, users.name AS author_name, users.id AS author_id
+SELECT posts.id, posts.title, posts.category, posts.created_at, posts.updated_at, posts.score,
+    users.name AS author_name, users.id AS author_id,
+    COALESCE(pv.vote,0)::smallint AS user_vote
 FROM posts
 JOIN users ON posts.user_id = users.id
-WHERE ($2::post_category IS NULL OR posts.category = $2)
-AND ($3::timestamp IS NULL OR posts.created_at > $3)
+LEFT JOIN post_votes pv ON pv.post_id = post_id AND pv.user_id = $2
+WHERE ($3::post_category IS NULL OR posts.category = $3)
+AND ($4::timestamp IS NULL OR posts.created_at > $4)
 ORDER BY posts.created_at ASC
 LIMIT $1
 `
 
 type ListPostsByOldestParams struct {
-	Limit    int32            `json:"limit"`
-	Category NullPostCategory `json:"category"`
-	Cursor   pgtype.Timestamp `json:"cursor"`
+	Limit         int32            `json:"limit"`
+	CurrentUserID pgtype.UUID      `json:"current_user_id"`
+	Category      NullPostCategory `json:"category"`
+	Cursor        pgtype.Timestamp `json:"cursor"`
 }
 
 type ListPostsByOldestRow struct {
@@ -174,12 +222,20 @@ type ListPostsByOldestRow struct {
 	Title      string       `json:"title"`
 	Category   PostCategory `json:"category"`
 	CreatedAt  time.Time    `json:"created_at"`
+	UpdatedAt  time.Time    `json:"updated_at"`
+	Score      int32        `json:"score"`
 	AuthorName string       `json:"author_name"`
 	AuthorID   uuid.UUID    `json:"author_id"`
+	UserVote   int16        `json:"user_vote"`
 }
 
 func (q *Queries) ListPostsByOldest(ctx context.Context, arg ListPostsByOldestParams) ([]ListPostsByOldestRow, error) {
-	rows, err := q.db.Query(ctx, listPostsByOldest, arg.Limit, arg.Category, arg.Cursor)
+	rows, err := q.db.Query(ctx, listPostsByOldest,
+		arg.Limit,
+		arg.CurrentUserID,
+		arg.Category,
+		arg.Cursor,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -192,8 +248,11 @@ func (q *Queries) ListPostsByOldest(ctx context.Context, arg ListPostsByOldestPa
 			&i.Title,
 			&i.Category,
 			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
 			&i.AuthorName,
 			&i.AuthorID,
+			&i.UserVote,
 		); err != nil {
 			return nil, err
 		}
@@ -205,11 +264,44 @@ func (q *Queries) ListPostsByOldest(ctx context.Context, arg ListPostsByOldestPa
 	return items, nil
 }
 
+const removePostVote = `-- name: RemovePostVote :exec
+DELETE FROM post_votes WHERE post_id = $1 AND user_id = $2
+`
+
+type RemovePostVoteParams struct {
+	PostID uuid.UUID `json:"post_id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) RemovePostVote(ctx context.Context, arg RemovePostVoteParams) error {
+	_, err := q.db.Exec(ctx, removePostVote, arg.PostID, arg.UserID)
+	return err
+}
+
+const setPostVote = `-- name: SetPostVote :exec
+INSERT INTO post_votes (post_id, user_id, vote)
+VALUES ($1, $2, $3)
+ON CONFLICT (post_id, user_id) DO UPDATE
+SET vote = EXCLUDED.vote
+`
+
+type SetPostVoteParams struct {
+	PostID uuid.UUID `json:"post_id"`
+	UserID uuid.UUID `json:"user_id"`
+	Vote   int16     `json:"vote"`
+}
+
+// This is "Upsert". If the row exists, it overwrites the vote. If not, it inserts it
+func (q *Queries) SetPostVote(ctx context.Context, arg SetPostVoteParams) error {
+	_, err := q.db.Exec(ctx, setPostVote, arg.PostID, arg.UserID, arg.Vote)
+	return err
+}
+
 const updatePost = `-- name: UpdatePost :one
 UPDATE posts
 SET title = $3, content = $4, category = $5, updated_at = $6
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, title, content, category, created_at, updated_at
+RETURNING id, user_id, title, content, category, created_at, updated_at, score
 `
 
 type UpdatePostParams struct {
@@ -239,6 +331,21 @@ func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, e
 		&i.Category,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Score,
 	)
 	return i, err
+}
+
+const updatePostScore = `-- name: UpdatePostScore :exec
+UPDATE posts SET score = score + $2 WHERE id = $1
+`
+
+type UpdatePostScoreParams struct {
+	ID    uuid.UUID `json:"id"`
+	Score int32     `json:"score"`
+}
+
+func (q *Queries) UpdatePostScore(ctx context.Context, arg UpdatePostScoreParams) error {
+	_, err := q.db.Exec(ctx, updatePostScore, arg.ID, arg.Score)
+	return err
 }
