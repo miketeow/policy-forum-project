@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"policy-forum-backend/internal/store"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -18,6 +20,10 @@ type CreateCommentRequest struct {
 
 type UpdateCommentRequest struct {
 	Content string `json:"content"`
+}
+
+type VoteCommentRequest struct {
+	Vote int16 `json:"vote"`
 }
 
 func (app *application) createCommentHandler(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +98,12 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 	var comments []store.ListCommentsByNewestRow
 	var err error
 
+	var currentUserID pgtype.UUID
+
+	if userID, ok := r.Context().Value(userIDKey).(uuid.UUID); ok {
+		currentUserID = pgtype.UUID{Bytes: userID, Valid: true}
+	}
+
 	postIDParam := r.PathValue("postId")
 	postId, err := uuid.Parse(postIDParam)
 	if err != nil {
@@ -126,10 +138,11 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 	// the switch
 	if sortOrder == "asc" {
 		oldestComments, dbErr := app.db.ListCommentsByOldest(r.Context(), store.ListCommentsByOldestParams{
-			PostID:   postId,
-			Limit:    int32(pagination.Limit),
-			ParentID: nullParentID,
-			Cursor:   pgtype.Timestamp{Time: pagination.Cursor, Valid: hasCursor},
+			PostID:        postId,
+			Limit:         int32(pagination.Limit),
+			ParentID:      nullParentID,
+			Cursor:        pgtype.Timestamp{Time: pagination.Cursor, Valid: hasCursor},
+			CurrentUserID: currentUserID,
 		})
 		err = dbErr
 		// convert the type
@@ -147,6 +160,7 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 				Time:  pagination.Cursor,
 				Valid: hasCursor,
 			},
+			CurrentUserID: currentUserID,
 		})
 	}
 
@@ -227,4 +241,100 @@ func (app *application) deleteCommentHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (app *application) voteCommentHandler(w http.ResponseWriter, r *http.Request) {
+	commentIDParam := r.PathValue("commentId")
+	commentId, err := uuid.Parse(commentIDParam)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Invalid comment ID format")
+		return
+	}
+
+	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var req VoteCommentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Vote != 1 && req.Vote != -1) {
+		writeJSONError(w, http.StatusBadRequest, "Vote must be 1 or -1")
+		return
+	}
+
+	tx, err := app.pool.Begin(r.Context())
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to start transaction")
+		return
+	}
+	// safely abort if no explicit commit
+	defer tx.Rollback(r.Context())
+
+	// attach transaction to sqlc queries
+	qtx := app.db.WithTx(tx)
+
+	// check user's current vote in the ledger
+	currentVote, err := qtx.GetCommentVote(r.Context(), store.GetCommentVoteParams{
+		CommentID: commentId,
+		UserID:    userID,
+	})
+
+	var delta int32 = 0
+
+	// ledger math
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// user never vote on this post
+			delta = int32(req.Vote)
+			err = qtx.SetCommentVote(r.Context(), store.SetCommentVoteParams{
+				CommentID: commentId,
+				UserID:    userID,
+				Vote:      req.Vote,
+			})
+		} else {
+			writeJSONError(w, http.StatusInternalServerError, "Database error")
+			return
+		}
+	} else {
+		if currentVote == req.Vote {
+			// user click the same button, toggling vote off
+			delta = -int32(req.Vote)
+			err = qtx.RemoveCommentVote(r.Context(), store.RemoveCommentVoteParams{
+				CommentID: commentId,
+				UserID:    userID,
+			})
+		} else {
+			// user flipped the vote, e.g. upvote to downvote
+			delta = int32(req.Vote * 2)
+			err = qtx.SetCommentVote(r.Context(), store.SetCommentVoteParams{
+				CommentID: commentId,
+				UserID:    userID,
+				Vote:      req.Vote,
+			})
+		}
+	}
+
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to update ledger")
+		return
+	}
+
+	err = qtx.UpdateCommentScore(r.Context(), store.UpdateCommentScoreParams{
+		ID:    commentId,
+		Score: delta,
+	})
+
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to update comment score")
+		return
+	}
+
+	// commit the transaction
+	if err = tx.Commit(r.Context()); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Failed to commit transaction")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

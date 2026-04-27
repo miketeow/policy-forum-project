@@ -1,6 +1,5 @@
 "use client";
 
-import { fetchComments } from "@/lib/api-comments";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { CommentThread } from "./comment-thread";
 import { Button } from "@/components/ui/button";
@@ -11,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useRouter, useSearchParams } from "next/navigation";
+import { fetchCommentsAction } from "@/app/actions/forum";
 
 export interface CommentsDetail {
   id: string;
@@ -21,6 +21,8 @@ export interface CommentsDetail {
   author_id: string;
   author_name: string;
   reply_count: number;
+  score: number;
+  user_vote: number;
 }
 
 export function CommentSection({
@@ -46,9 +48,9 @@ export function CommentSection({
 
   const { data, status, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
-      queryKey: ["comments", postId, "root", sortOrder],
+      queryKey: ["comments", postId, "root", sortOrder, currentUserId],
       queryFn: ({ pageParam }) =>
-        fetchComments({ pageParam, postId, parentId: null, sort: sortOrder }),
+        fetchCommentsAction(postId, null, pageParam, sortOrder),
       initialPageParam: 0 as string | number,
       placeholderData: keepPreviousData,
       getNextPageParam: (lastPage) => {

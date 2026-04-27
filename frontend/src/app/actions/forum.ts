@@ -1,6 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { CommentsDetail } from "../forum/_components/comment-section";
 
 export interface ActionState {
   success: boolean;
@@ -14,11 +15,12 @@ export async function fetchPostAction(
 ) {
   const cookieStore = await cookies();
   const token = cookieStore.get("session")?.value;
-  console.log("FETCH POST ACTION - Token exists?", !!token);
 
-  const headers: HeadersInit = {};
+  const headers = new Headers();
   // attach the token
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (token) {
+    headers.append("Authorization", `Bearer ${token}`);
+  }
 
   const cursorQuery = pageParam
     ? `&cursor=${encodeURIComponent(pageParam as string)}`
@@ -361,4 +363,81 @@ export async function votePostAction(
   } catch (error) {
     return { success: false, message: "Error", error: `${error}` };
   }
+}
+
+export async function voteCommentAction(
+  commentId: string,
+  vote: 1 | -1,
+): Promise<ActionState> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+  if (!token) {
+    return {
+      success: false,
+      message: "Unauthorized",
+      error: "Unauthorized",
+    };
+  }
+
+  try {
+    const res = await fetch(
+      `http://localhost:8080/api/comments/${commentId}/vote`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ vote }),
+      },
+    );
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      let parsedError = "Backend error";
+      try {
+        const errData = JSON.parse(errorText);
+        parsedError = errData.error || errorText;
+      } catch (e) {
+        parsedError = errorText;
+      }
+      return { success: false, message: parsedError, error: parsedError };
+    }
+
+    return { success: true, message: "Vote recorded", error: "" };
+  } catch (error) {
+    return { success: false, message: "Error", error: `${error}` };
+  }
+}
+
+export async function fetchCommentsAction(
+  postId: string,
+  parentId: string | null,
+  pageParam: number | string = 0,
+  sort: string = "desc",
+): Promise<CommentsDetail[]> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+
+  const headers = new Headers();
+  // attach the token
+  if (token) {
+    headers.append("Authorization", `Bearer ${token}`);
+  }
+  // base url
+  let url = `http://localhost:8080/api/posts/${postId}/comments?limit=5`;
+
+  // append cursor if exist
+  if (pageParam) url += `&cursor=${encodeURIComponent(pageParam as string)}`;
+
+  // append parentId if exist
+  if (parentId) url += `&parentId=${parentId}`;
+
+  // append sort
+  if (sort) url += `&sort=${sort}`;
+
+  const res = await fetch(url, { headers, cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch comments");
+
+  return res.json();
 }

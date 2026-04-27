@@ -3,6 +3,7 @@
 import {
   createCommentAction,
   deleteCommentAction,
+  fetchCommentsAction,
   updateCommentAction,
 } from "@/app/actions/forum";
 import { Button } from "@/components/ui/button";
@@ -13,12 +14,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
-import { fetchComments } from "@/lib/api-comments";
 import { formatDate } from "@/lib/utils";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { MoreVertical } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { CommentVoteButton } from "./comment-vote-button";
 
 export interface CommentNode {
   id: string;
@@ -28,6 +29,8 @@ export interface CommentNode {
   author_name: string;
   author_id: string;
   reply_count: number;
+  score: number;
+  user_vote: number;
 }
 
 export function CommentThread({
@@ -52,14 +55,13 @@ export function CommentThread({
 
   const { data, status, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
-      queryKey: ["comments", postId, comment.id],
+      queryKey: ["comments", postId, comment.id, currentUserId],
       queryFn: ({ pageParam }) =>
-        fetchComments({ pageParam, postId, parentId: comment.id }),
+        fetchCommentsAction(postId, comment.id, pageParam, "asc"),
       initialPageParam: 0 as string | number,
       getNextPageParam: (lastPage) => {
         if (!lastPage || lastPage.length < 5) return undefined;
         const cursor = lastPage[lastPage.length - 1].created_at;
-        console.log("[REACT TRACER] Passing Cursor to Next Page:", cursor); // ADD THIS
         return cursor;
       },
       // don't fetch from Go backend until user click "show replies"
@@ -172,7 +174,12 @@ export function CommentThread({
           <p className="text-sm whitespace-pre-wrap mt-1">{comment.content}</p>
         )}
 
-        <div className="mt-2 flex gap-4">
+        <div className="mt-2 flex gap-4 items-center">
+          <CommentVoteButton
+            commentId={comment.id}
+            initialScore={comment.score}
+            initialUserVote={comment.user_vote}
+          />
           <Button
             variant="ghost"
             size="sm"

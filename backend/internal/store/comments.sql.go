@@ -68,27 +68,48 @@ func (q *Queries) DeleteComment(ctx context.Context, arg DeleteCommentParams) er
 	return err
 }
 
+const getCommentVote = `-- name: GetCommentVote :one
+SELECT vote FROM comment_votes WHERE comment_id = $1 AND user_id = $2
+`
+
+type GetCommentVoteParams struct {
+	CommentID uuid.UUID `json:"comment_id"`
+	UserID    uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetCommentVote(ctx context.Context, arg GetCommentVoteParams) (int16, error) {
+	row := q.db.QueryRow(ctx, getCommentVote, arg.CommentID, arg.UserID)
+	var vote int16
+	err := row.Scan(&vote)
+	return vote, err
+}
+
 const listCommentsByNewest = `-- name: ListCommentsByNewest :many
-SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at, users.id AS author_id, users.name AS author_name,
+SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at,
+    comments.score,
+    users.id AS author_id, users.name AS author_name,
+    COALESCE(cv.vote, 0)::smallint AS user_vote,
     (SELECT COUNT(*) FROM comments AS replies WHERE replies.parent_id = comments.id) AS reply_count
 FROM comments
 JOIN users ON comments.user_id = users.id
+LEFT JOIN comment_votes cv ON cv.comment_id = comments.id AND cv.user_id = $3::uuid
 WHERE comments.post_id = $1
 AND(
-($3::uuid IS NULL AND comments.parent_id IS NULL)
+($4::uuid IS NULL AND comments.parent_id IS NULL)
 OR
-(comments.parent_id = $3)
+(comments.parent_id = $4)
 )
-AND ($4::timestamp IS NULL OR comments.created_at < $4)
+AND ($5::timestamp IS NULL OR comments.created_at < $5)
 ORDER BY comments.created_at DESC
 LIMIT $2
 `
 
 type ListCommentsByNewestParams struct {
-	PostID   uuid.UUID        `json:"post_id"`
-	Limit    int32            `json:"limit"`
-	ParentID pgtype.UUID      `json:"parent_id"`
-	Cursor   pgtype.Timestamp `json:"cursor"`
+	PostID        uuid.UUID        `json:"post_id"`
+	Limit         int32            `json:"limit"`
+	CurrentUserID pgtype.UUID      `json:"current_user_id"`
+	ParentID      pgtype.UUID      `json:"parent_id"`
+	Cursor        pgtype.Timestamp `json:"cursor"`
 }
 
 type ListCommentsByNewestRow struct {
@@ -97,8 +118,10 @@ type ListCommentsByNewestRow struct {
 	Content    string      `json:"content"`
 	CreatedAt  time.Time   `json:"created_at"`
 	UpdatedAt  time.Time   `json:"updated_at"`
+	Score      int32       `json:"score"`
 	AuthorID   uuid.UUID   `json:"author_id"`
 	AuthorName string      `json:"author_name"`
+	UserVote   int16       `json:"user_vote"`
 	ReplyCount int64       `json:"reply_count"`
 }
 
@@ -106,6 +129,7 @@ func (q *Queries) ListCommentsByNewest(ctx context.Context, arg ListCommentsByNe
 	rows, err := q.db.Query(ctx, listCommentsByNewest,
 		arg.PostID,
 		arg.Limit,
+		arg.CurrentUserID,
 		arg.ParentID,
 		arg.Cursor,
 	)
@@ -122,8 +146,10 @@ func (q *Queries) ListCommentsByNewest(ctx context.Context, arg ListCommentsByNe
 			&i.Content,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Score,
 			&i.AuthorID,
 			&i.AuthorName,
+			&i.UserVote,
 			&i.ReplyCount,
 		); err != nil {
 			return nil, err
@@ -137,26 +163,31 @@ func (q *Queries) ListCommentsByNewest(ctx context.Context, arg ListCommentsByNe
 }
 
 const listCommentsByOldest = `-- name: ListCommentsByOldest :many
-SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at, users.id AS author_id, users.name AS author_name,
+SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at,
+    comments.score,
+    users.id AS author_id, users.name AS author_name,
+    COALESCE(cv.vote, 0)::smallint AS user_vote,
     (SELECT COUNT(*) FROM comments AS replies WHERE replies.parent_id = comments.id) AS reply_count
 FROM comments
 JOIN users ON comments.user_id = users.id
+LEFT JOIN comment_votes cv ON cv.comment_id = comments.id AND cv.user_id = $3::uuid
 WHERE comments.post_id = $1
 AND(
-($3::uuid IS NULL AND comments.parent_id IS NULL)
+($4::uuid IS NULL AND comments.parent_id IS NULL)
 OR
-(comments.parent_id = $3)
+(comments.parent_id = $4)
 )
-AND ($4::timestamp IS NULL OR comments.created_at > $4)
+AND ($5::timestamp IS NULL OR comments.created_at > $5)
 ORDER BY comments.created_at ASC
 LIMIT $2
 `
 
 type ListCommentsByOldestParams struct {
-	PostID   uuid.UUID        `json:"post_id"`
-	Limit    int32            `json:"limit"`
-	ParentID pgtype.UUID      `json:"parent_id"`
-	Cursor   pgtype.Timestamp `json:"cursor"`
+	PostID        uuid.UUID        `json:"post_id"`
+	Limit         int32            `json:"limit"`
+	CurrentUserID pgtype.UUID      `json:"current_user_id"`
+	ParentID      pgtype.UUID      `json:"parent_id"`
+	Cursor        pgtype.Timestamp `json:"cursor"`
 }
 
 type ListCommentsByOldestRow struct {
@@ -165,8 +196,10 @@ type ListCommentsByOldestRow struct {
 	Content    string      `json:"content"`
 	CreatedAt  time.Time   `json:"created_at"`
 	UpdatedAt  time.Time   `json:"updated_at"`
+	Score      int32       `json:"score"`
 	AuthorID   uuid.UUID   `json:"author_id"`
 	AuthorName string      `json:"author_name"`
+	UserVote   int16       `json:"user_vote"`
 	ReplyCount int64       `json:"reply_count"`
 }
 
@@ -174,6 +207,7 @@ func (q *Queries) ListCommentsByOldest(ctx context.Context, arg ListCommentsByOl
 	rows, err := q.db.Query(ctx, listCommentsByOldest,
 		arg.PostID,
 		arg.Limit,
+		arg.CurrentUserID,
 		arg.ParentID,
 		arg.Cursor,
 	)
@@ -190,8 +224,10 @@ func (q *Queries) ListCommentsByOldest(ctx context.Context, arg ListCommentsByOl
 			&i.Content,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Score,
 			&i.AuthorID,
 			&i.AuthorName,
+			&i.UserVote,
 			&i.ReplyCount,
 		); err != nil {
 			return nil, err
@@ -202,6 +238,38 @@ func (q *Queries) ListCommentsByOldest(ctx context.Context, arg ListCommentsByOl
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeCommentVote = `-- name: RemoveCommentVote :exec
+DELETE FROM comment_votes WHERE comment_id = $1 AND user_id = $2
+`
+
+type RemoveCommentVoteParams struct {
+	CommentID uuid.UUID `json:"comment_id"`
+	UserID    uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) RemoveCommentVote(ctx context.Context, arg RemoveCommentVoteParams) error {
+	_, err := q.db.Exec(ctx, removeCommentVote, arg.CommentID, arg.UserID)
+	return err
+}
+
+const setCommentVote = `-- name: SetCommentVote :exec
+INSERT INTO comment_votes(comment_id,user_id,vote)
+VALUES($1,$2,$3)
+ON CONFLICT (comment_id,user_id) DO UPDATE
+SET vote = EXCLUDED.vote
+`
+
+type SetCommentVoteParams struct {
+	CommentID uuid.UUID `json:"comment_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	Vote      int16     `json:"vote"`
+}
+
+func (q *Queries) SetCommentVote(ctx context.Context, arg SetCommentVoteParams) error {
+	_, err := q.db.Exec(ctx, setCommentVote, arg.CommentID, arg.UserID, arg.Vote)
+	return err
 }
 
 const updateComment = `-- name: UpdateComment :one
@@ -237,4 +305,18 @@ func (q *Queries) UpdateComment(ctx context.Context, arg UpdateCommentParams) (C
 		&i.Score,
 	)
 	return i, err
+}
+
+const updateCommentScore = `-- name: UpdateCommentScore :exec
+UPDATE comments SET score = score + $2 WHERE id = $1
+`
+
+type UpdateCommentScoreParams struct {
+	ID    uuid.UUID `json:"id"`
+	Score int32     `json:"score"`
+}
+
+func (q *Queries) UpdateCommentScore(ctx context.Context, arg UpdateCommentScoreParams) error {
+	_, err := q.db.Exec(ctx, updateCommentScore, arg.ID, arg.Score)
+	return err
 }

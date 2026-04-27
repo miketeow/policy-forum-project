@@ -16,6 +16,7 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeleteComment(ctx context.Context, arg DeleteCommentParams) error
 	DeletePost(ctx context.Context, arg DeletePostParams) error
+	GetCommentVote(ctx context.Context, arg GetCommentVoteParams) (int16, error)
 	GetPostByID(ctx context.Context, arg GetPostByIDParams) (GetPostByIDRow, error)
 	GetPostVote(ctx context.Context, arg GetPostVoteParams) (int16, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
@@ -24,10 +25,13 @@ type Querier interface {
 	ListCommentsByOldest(ctx context.Context, arg ListCommentsByOldestParams) ([]ListCommentsByOldestRow, error)
 	ListPostsByNewest(ctx context.Context, arg ListPostsByNewestParams) ([]ListPostsByNewestRow, error)
 	ListPostsByOldest(ctx context.Context, arg ListPostsByOldestParams) ([]ListPostsByOldestRow, error)
+	RemoveCommentVote(ctx context.Context, arg RemoveCommentVoteParams) error
 	RemovePostVote(ctx context.Context, arg RemovePostVoteParams) error
+	SetCommentVote(ctx context.Context, arg SetCommentVoteParams) error
 	// This is "Upsert". If the row exists, it overwrites the vote. If not, it inserts it
 	SetPostVote(ctx context.Context, arg SetPostVoteParams) error
 	UpdateComment(ctx context.Context, arg UpdateCommentParams) (Comment, error)
+	UpdateCommentScore(ctx context.Context, arg UpdateCommentScoreParams) error
 	UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, error)
 	UpdatePostScore(ctx context.Context, arg UpdatePostScoreParams) error
 }
