@@ -2,6 +2,7 @@
 
 import { votePostAction } from "@/app/actions/forum";
 import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowBigDown, ArrowBigUp } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -17,9 +18,25 @@ export function VoteButton({
   initialScore,
   initialUserVote,
 }: VoteButtonProps) {
+  const queryClient = useQueryClient();
   const [score, setScore] = useState(initialScore);
   const [userVote, setUserVote] = useState(initialUserVote);
   const [isVoting, setIsVoting] = useState(false); // prevent spam clicking
+  // 2. THE FIX: Track the "previous" props
+  const [prevInitialScore, setPrevInitialScore] = useState(initialScore);
+  const [prevInitialVote, setPrevInitialVote] = useState(initialUserVote);
+
+  // 3. THE FIX: Update during render if the server data changed!
+  if (
+    initialScore !== prevInitialScore ||
+    initialUserVote !== prevInitialVote
+  ) {
+    setPrevInitialScore(initialScore);
+    setPrevInitialVote(initialUserVote);
+
+    setScore(initialScore);
+    setUserVote(initialUserVote);
+  }
 
   const handleVote = async (voteValue: 1 | -1) => {
     if (isVoting) return;
@@ -54,6 +71,8 @@ export function VoteButton({
       // undo the math
       setScore((prev) => prev - delta);
       setUserVote(userVote); // set to original value
+    } else {
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
     }
 
     setIsVoting(false);

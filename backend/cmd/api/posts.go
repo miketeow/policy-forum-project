@@ -97,6 +97,9 @@ func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) 
 
 	if userID, ok := r.Context().Value(userIDKey).(uuid.UUID); ok {
 		currentUserID = pgtype.UUID{Bytes: userID, Valid: true}
+		log.Printf("🔥 SUCCESS: User %s is fetching posts!", userID.String())
+	} else {
+		log.Println("⚠️ WARNING: User is fetching posts as ANONYMOUS GUEST!")
 	}
 
 	if sortOrder == "asc" {

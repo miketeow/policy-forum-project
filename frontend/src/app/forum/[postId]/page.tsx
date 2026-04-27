@@ -7,6 +7,7 @@ import { BreadcrumbNav } from "../_components/breadcumb-nav";
 import { CommentSection } from "../_components/comment-section";
 import { PostAction } from "../_components/post-actions";
 import { VoteButton } from "../_components/vote-button";
+import { cookies } from "next/headers";
 
 interface PostDetailPageProps {
   params: Promise<{ postId: string }>;
@@ -28,7 +29,16 @@ interface PostDetail {
 
 async function getPostByID(postId: string): Promise<PostDetail | null> {
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("session")?.value;
+
+    const headers = new Headers();
+    // attach the token
+    if (token) {
+      headers.append("Authorization", `Bearer ${token}`);
+    }
     const res = await fetch(`http://localhost:8080/api/posts/${postId}`, {
+      headers,
       cache: "no-store",
     });
 

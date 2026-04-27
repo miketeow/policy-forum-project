@@ -9,7 +9,7 @@ SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, p
     COALESCE(pv.vote,0)::smallint AS user_vote
 FROM posts
 JOIN users ON posts.user_id = users.id
-LEFT JOIN post_votes pv ON pv.post_id = post_id AND pv.user_id = sqlc.narg('current_user_id')
+LEFT JOIN post_votes pv ON pv.post_id = posts.id AND pv.user_id = sqlc.narg('current_user_id')::uuid
 WHERE posts.id = $1 LIMIT 1;
 
 -- name: ListPostsByNewest :many
@@ -18,7 +18,7 @@ SELECT posts.id, posts.title, posts.category, posts.created_at, posts.updated_at
     COALESCE(pv.vote,0)::smallint AS user_vote
 FROM posts
 JOIN users ON posts.user_id = users.id
-LEFT JOIN post_votes pv ON pv.post_id = post_id AND pv.user_id = sqlc.narg('current_user_id')
+LEFT JOIN post_votes pv ON pv.post_id = posts.id AND pv.user_id = sqlc.narg('current_user_id')::uuid
 WHERE (sqlc.narg('category')::post_category IS NULL OR posts.category = sqlc.narg('category'))
 AND (sqlc.narg('cursor')::timestamp IS NULL OR posts.created_at < sqlc.narg('cursor'))
 ORDER BY posts.created_at DESC
@@ -30,7 +30,7 @@ SELECT posts.id, posts.title, posts.category, posts.created_at, posts.updated_at
     COALESCE(pv.vote,0)::smallint AS user_vote
 FROM posts
 JOIN users ON posts.user_id = users.id
-LEFT JOIN post_votes pv ON pv.post_id = post_id AND pv.user_id = sqlc.narg('current_user_id')
+LEFT JOIN post_votes pv ON pv.post_id = posts.id AND pv.user_id = sqlc.narg('current_user_id')::uuid
 WHERE (sqlc.narg('category')::post_category IS NULL OR posts.category = sqlc.narg('category'))
 AND (sqlc.narg('cursor')::timestamp IS NULL OR posts.created_at > sqlc.narg('cursor'))
 ORDER BY posts.created_at ASC

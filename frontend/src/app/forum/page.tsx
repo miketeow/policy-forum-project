@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { CreatePostForm } from "./_components/create-post-form";
 import { Post } from "./_components/post-card";
 import { PostList } from "./_components/post-list";
+import { cookies } from "next/headers";
 
 interface UserProfile {
   id: string;
@@ -15,12 +16,19 @@ interface UserProfile {
 
 async function getPosts(sort: string): Promise<Post[]> {
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("session")?.value;
+
+    const headers = new Headers();
+    // attach the token
+    if (token) {
+      headers.append("Authorization", `Bearer ${token}`);
+    }
     // hit the go backend directly, set "no-store" to avoid aggresive cache
     const res = await fetch(
       `http://localhost:8080/api/posts?limit=20&sort=${sort}`,
-      {
-        cache: "no-store",
-      },
+
+      { headers, cache: "no-store" },
     );
 
     if (!res.ok) {

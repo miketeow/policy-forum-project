@@ -10,34 +10,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useRouter, useSearchParams } from "next/navigation";
+import { fetchPostAction } from "@/app/actions/forum";
 
 interface PostListProps {
   initialPosts: Post[];
   initialSort: "asc" | "desc";
-}
-
-async function fetchPost({
-  pageParam = 0,
-  sort,
-}: {
-  pageParam: number | string;
-  sort?: "desc" | "asc";
-}) {
-  // if cursor is 0, don't attach it to the url, get page 1 instead
-  // otherwise append it
-  const cursorQuery = pageParam
-    ? `&cursor=${encodeURIComponent(pageParam as string)}`
-    : "";
-  let url = `http://localhost:8080/api/posts?limit=20${cursorQuery}`;
-  if (sort) url += `&sort=${sort}`;
-
-  const res = await fetch(url);
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch posts");
-  }
-
-  return res.json();
 }
 
 export function PostList({ initialPosts, initialSort }: PostListProps) {
@@ -60,7 +37,7 @@ export function PostList({ initialPosts, initialSort }: PostListProps) {
     isFetchingNextPage,
   } = useInfiniteQuery({
     queryKey: ["posts", sortOrder],
-    queryFn: ({ pageParam }) => fetchPost({ pageParam, sort: sortOrder }),
+    queryFn: ({ pageParam }) => fetchPostAction(pageParam, sortOrder),
 
     initialPageParam: 0,
     placeholderData: keepPreviousData,

@@ -74,7 +74,7 @@ SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, p
     COALESCE(pv.vote,0)::smallint AS user_vote
 FROM posts
 JOIN users ON posts.user_id = users.id
-LEFT JOIN post_votes pv ON pv.post_id = post_id AND pv.user_id = $2
+LEFT JOIN post_votes pv ON pv.post_id = posts.id AND pv.user_id = $2::uuid
 WHERE posts.id = $1 LIMIT 1
 `
 
@@ -136,7 +136,7 @@ SELECT posts.id, posts.title, posts.category, posts.created_at, posts.updated_at
     COALESCE(pv.vote,0)::smallint AS user_vote
 FROM posts
 JOIN users ON posts.user_id = users.id
-LEFT JOIN post_votes pv ON pv.post_id = post_id AND pv.user_id = $2
+LEFT JOIN post_votes pv ON pv.post_id = posts.id AND pv.user_id = $2::uuid
 WHERE ($3::post_category IS NULL OR posts.category = $3)
 AND ($4::timestamp IS NULL OR posts.created_at < $4)
 ORDER BY posts.created_at DESC
@@ -203,7 +203,7 @@ SELECT posts.id, posts.title, posts.category, posts.created_at, posts.updated_at
     COALESCE(pv.vote,0)::smallint AS user_vote
 FROM posts
 JOIN users ON posts.user_id = users.id
-LEFT JOIN post_votes pv ON pv.post_id = post_id AND pv.user_id = $2
+LEFT JOIN post_votes pv ON pv.post_id = posts.id AND pv.user_id = $2::uuid
 WHERE ($3::post_category IS NULL OR posts.category = $3)
 AND ($4::timestamp IS NULL OR posts.created_at > $4)
 ORDER BY posts.created_at ASC

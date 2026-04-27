@@ -60,10 +60,13 @@ func main() {
 	mux.HandleFunc("POST /api/auth/logout", app.logoutHandler)
 	mux.HandleFunc("GET /api/users/me", app.requireAuth(app.getUserProfileHandler))
 	// public: anyone can see posts
-	mux.HandleFunc("GET /api/posts", app.listPostHandler)
+	// optional auth, if logged in, can see vote count
+	mux.HandleFunc("GET /api/posts", app.optionalAuth(app.listPostHandler))
 	// protected: must be logged in to post
 	mux.HandleFunc("POST /api/posts", app.requireAuth(app.createPostHandler))
-	mux.HandleFunc("GET /api/posts/{postId}", app.getPostHandler)
+	// public: anyone can see posts
+	// optional auth, if logged in, can see vote count
+	mux.HandleFunc("GET /api/posts/{postId}", app.optionalAuth(app.getPostHandler))
 
 	mux.HandleFunc("POST /api/posts/{postId}/comments", app.requireAuth(app.createCommentHandler))
 	mux.HandleFunc("GET /api/posts/{postId}/comments", app.getCommentsHandler)

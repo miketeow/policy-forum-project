@@ -8,6 +8,28 @@ export interface ActionState {
   error: string;
 }
 
+export async function fetchPostAction(
+  pageParam: number | string = 0,
+  sort: string = "desc",
+) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+  console.log("FETCH POST ACTION - Token exists?", !!token);
+
+  const headers: HeadersInit = {};
+  // attach the token
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const cursorQuery = pageParam
+    ? `&cursor=${encodeURIComponent(pageParam as string)}`
+    : "";
+  const url = `http://localhost:8080/api/posts?limit=20&sort=${sort}${cursorQuery}`;
+
+  const res = await fetch(url, { headers, cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch posts");
+  return res.json();
+}
+
 export async function createPostAction(
   formData: FormData,
 ): Promise<ActionState> {
