@@ -136,7 +136,21 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	// the switch
-	if sortOrder == "asc" {
+	switch sortOrder {
+	case "popular":
+		popularComments, dbErr := app.db.ListCommentsByPopular(r.Context(), store.ListCommentsByPopularParams{
+			PostID:        postId,
+			Limit:         int32(pagination.Limit),
+			ParentID:      nullParentID,
+			Offset:        pagination.Offset,
+			CurrentUserID: currentUserID,
+		})
+		err = dbErr
+		// convert the type
+		for _, c := range popularComments {
+			comments = append(comments, store.ListCommentsByNewestRow(c))
+		}
+	case "asc":
 		oldestComments, dbErr := app.db.ListCommentsByOldest(r.Context(), store.ListCommentsByOldestParams{
 			PostID:        postId,
 			Limit:         int32(pagination.Limit),
@@ -149,9 +163,7 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 		for _, c := range oldestComments {
 			comments = append(comments, store.ListCommentsByNewestRow(c))
 		}
-	} else {
-
-		// call db method
+	case "desc":
 		comments, err = app.db.ListCommentsByNewest(r.Context(), store.ListCommentsByNewestParams{
 			PostID:   postId,
 			Limit:    int32(pagination.Limit),

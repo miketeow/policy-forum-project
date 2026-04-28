@@ -22,9 +22,13 @@ export async function fetchPostAction(
     headers.append("Authorization", `Bearer ${token}`);
   }
 
-  const cursorQuery = pageParam
-    ? `&cursor=${encodeURIComponent(pageParam as string)}`
-    : "";
+  let cursorQuery = "";
+  if (sort == "popular") {
+    cursorQuery = `&offset=${pageParam}`;
+  } else if (pageParam && pageParam !== 0) {
+    cursorQuery = `&cursor=${encodeURIComponent(pageParam as string)}`;
+  }
+
   const url = `http://localhost:8080/api/posts?limit=20&sort=${sort}${cursorQuery}`;
 
   const res = await fetch(url, { headers, cache: "no-store" });
@@ -427,8 +431,12 @@ export async function fetchCommentsAction(
   // base url
   let url = `http://localhost:8080/api/posts/${postId}/comments?limit=5`;
 
-  // append cursor if exist
-  if (pageParam) url += `&cursor=${encodeURIComponent(pageParam as string)}`;
+  // dynamic pagination
+  if (sort === "popular") {
+    url += `&offset=${pageParam}`;
+  } else if (pageParam && pageParam !== 0) {
+    url += `&cursor=${encodeURIComponent(pageParam as string)}`;
+  }
 
   // append parentId if exist
   if (parentId) url += `&parentId=${parentId}`;

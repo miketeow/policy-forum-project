@@ -31,15 +31,16 @@ export function CommentSection({
   currentUserId,
 }: {
   postId: string;
-  initialSort: "desc" | "asc";
+  initialSort: "desc" | "asc" | "popular";
   currentUserId: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const sortOrder = (searchParams.get("sort") as "desc" | "asc") || initialSort;
+  const sortOrder =
+    (searchParams.get("sort") as "desc" | "asc" | "popular") || initialSort;
 
-  const handleSortChange = (newSort: "desc" | "asc") => {
+  const handleSortChange = (newSort: "desc" | "asc" | "popular") => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("sort", newSort);
 
@@ -53,8 +54,11 @@ export function CommentSection({
         fetchCommentsAction(postId, null, pageParam, sortOrder),
       initialPageParam: 0 as string | number,
       placeholderData: keepPreviousData,
-      getNextPageParam: (lastPage) => {
+      getNextPageParam: (lastPage, allPages) => {
         if (!lastPage || lastPage.length < 5) return undefined;
+        if (sortOrder === "popular") {
+          return allPages.length * 5;
+        }
         return lastPage[lastPage.length - 1].created_at;
       },
     });
@@ -76,7 +80,12 @@ export function CommentSection({
               size="sm"
               className="text-muted-foreground"
             >
-              Sort by: {sortOrder === "desc" ? "Newest" : "Oldest"}
+              Sort by:{" "}
+              {sortOrder === "desc"
+                ? "Newest"
+                : sortOrder === "asc"
+                  ? "Oldest"
+                  : "Popular"}
             </Button>
           </DropdownMenuTrigger>
 
@@ -86,6 +95,9 @@ export function CommentSection({
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleSortChange("asc")}>
               Oldest
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleSortChange("popular")}>
+              Popular
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

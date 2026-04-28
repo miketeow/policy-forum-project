@@ -41,6 +41,20 @@ AND (sqlc.narg('cursor')::timestamp IS NULL OR comments.created_at > sqlc.narg('
 ORDER BY comments.created_at ASC
 LIMIT $2;
 
+-- name: ListCommentsByPopular :many
+SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at,
+    comments.score,
+    users.id AS author_id, users.name AS author_name,
+    COALESCE(cv.vote, 0)::smallint AS user_vote,
+    (SELECT COUNT(*) FROM comments AS replies WHERE replies.parent_id = comments.id) AS reply_count
+FROM comments
+JOIN users ON comments.user_id = users.id
+LEFT JOIN comment_votes cv ON cv.comment_id = comments.id AND cv.user_id = sqlc.narg('current_user_id')::uuid
+WHERE comments.post_id = $1
+AND (comments.parent_id = sqlc.narg('parent_id')::uuid OR (sqlc.narg('parent_id')::uuid IS NULL AND comments.parent_id IS NULL))
+ORDER BY comments.score DESC, comments.created_at DESC
+LIMIT $2 OFFSET $3;
+
 -- name: UpdateComment :one
 UPDATE comments
 SET content = $3, updated_at = $4

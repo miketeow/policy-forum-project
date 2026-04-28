@@ -23,8 +23,10 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	ListCommentsByNewest(ctx context.Context, arg ListCommentsByNewestParams) ([]ListCommentsByNewestRow, error)
 	ListCommentsByOldest(ctx context.Context, arg ListCommentsByOldestParams) ([]ListCommentsByOldestRow, error)
+	ListCommentsByPopular(ctx context.Context, arg ListCommentsByPopularParams) ([]ListCommentsByPopularRow, error)
 	ListPostsByNewest(ctx context.Context, arg ListPostsByNewestParams) ([]ListPostsByNewestRow, error)
 	ListPostsByOldest(ctx context.Context, arg ListPostsByOldestParams) ([]ListPostsByOldestRow, error)
+	ListPostsByPopular(ctx context.Context, arg ListPostsByPopularParams) ([]ListPostsByPopularRow, error)
 	RemoveCommentVote(ctx context.Context, arg RemoveCommentVoteParams) error
 	RemovePostVote(ctx context.Context, arg RemovePostVoteParams) error
 	SetCommentVote(ctx context.Context, arg SetCommentVoteParams) error

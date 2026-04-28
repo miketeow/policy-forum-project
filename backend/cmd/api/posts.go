@@ -30,6 +30,7 @@ type PaginationRequest struct {
 	Limit  int
 	Cursor time.Time
 	Sort   string
+	Offset int32
 }
 
 type VotePostRequest struct {
@@ -99,7 +100,19 @@ func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) 
 		currentUserID = pgtype.UUID{Bytes: userID, Valid: true}
 	}
 
-	if sortOrder == "asc" {
+	switch sortOrder {
+	case "popular":
+		popularPosts, dbErr := app.db.ListPostsByPopular(r.Context(), store.ListPostsByPopularParams{
+			Limit:         int32(pagination.Limit),
+			Offset:        pagination.Offset,
+			CurrentUserID: currentUserID,
+		})
+		err = dbErr
+
+		for _, p := range popularPosts {
+			posts = append(posts, store.ListPostsByNewestRow(p))
+		}
+	case "asc":
 		oldestPost, dbErr := app.db.ListPostsByOldest(r.Context(), store.ListPostsByOldestParams{
 			Limit: int32(pagination.Limit),
 			Cursor: pgtype.Timestamp{
@@ -113,8 +126,7 @@ func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) 
 		for _, p := range oldestPost {
 			posts = append(posts, store.ListPostsByNewestRow(p))
 		}
-	} else {
-
+	case "desc":
 		posts, err = app.db.ListPostsByNewest(r.Context(), store.ListPostsByNewestParams{
 			Limit: int32(pagination.Limit),
 			Cursor: pgtype.Timestamp{
@@ -124,6 +136,7 @@ func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) 
 			CurrentUserID: currentUserID,
 		})
 	}
+
 	if err != nil {
 		log.Printf("DB Error in listPostHandler: %v", err)
 		writeJSONError(w, http.StatusBadRequest, "Failed to list posts")
@@ -245,8 +258,9 @@ func (app *application) deletePostHandler(w http.ResponseWriter, r *http.Request
 func parsePagination(r *http.Request) PaginationRequest {
 	// default
 	req := PaginationRequest{
-		Limit: 20,
-		Sort:  "desc",
+		Limit:  20,
+		Sort:   "desc",
+		Offset: 0,
 	}
 
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
@@ -276,6 +290,12 @@ func parsePagination(r *http.Request) PaginationRequest {
 
 		if err != nil {
 			log.Printf("[PAGINATION ERROR] Failed to parse cursor '%s'. Error: %v", cursorStr, err)
+		}
+	}
+
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o > 0 {
+			req.Offset = int32(o)
 		}
 	}
 

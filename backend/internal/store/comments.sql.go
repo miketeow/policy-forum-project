@@ -240,6 +240,79 @@ func (q *Queries) ListCommentsByOldest(ctx context.Context, arg ListCommentsByOl
 	return items, nil
 }
 
+const listCommentsByPopular = `-- name: ListCommentsByPopular :many
+SELECT comments.id, comments.parent_id, comments.content, comments.created_at, comments.updated_at,
+    comments.score,
+    users.id AS author_id, users.name AS author_name,
+    COALESCE(cv.vote, 0)::smallint AS user_vote,
+    (SELECT COUNT(*) FROM comments AS replies WHERE replies.parent_id = comments.id) AS reply_count
+FROM comments
+JOIN users ON comments.user_id = users.id
+LEFT JOIN comment_votes cv ON cv.comment_id = comments.id AND cv.user_id = $4::uuid
+WHERE comments.post_id = $1
+AND (comments.parent_id = $5::uuid OR ($5::uuid IS NULL AND comments.parent_id IS NULL))
+ORDER BY comments.score DESC, comments.created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListCommentsByPopularParams struct {
+	PostID        uuid.UUID   `json:"post_id"`
+	Limit         int32       `json:"limit"`
+	Offset        int32       `json:"offset"`
+	CurrentUserID pgtype.UUID `json:"current_user_id"`
+	ParentID      pgtype.UUID `json:"parent_id"`
+}
+
+type ListCommentsByPopularRow struct {
+	ID         uuid.UUID   `json:"id"`
+	ParentID   pgtype.UUID `json:"parent_id"`
+	Content    string      `json:"content"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
+	Score      int32       `json:"score"`
+	AuthorID   uuid.UUID   `json:"author_id"`
+	AuthorName string      `json:"author_name"`
+	UserVote   int16       `json:"user_vote"`
+	ReplyCount int64       `json:"reply_count"`
+}
+
+func (q *Queries) ListCommentsByPopular(ctx context.Context, arg ListCommentsByPopularParams) ([]ListCommentsByPopularRow, error) {
+	rows, err := q.db.Query(ctx, listCommentsByPopular,
+		arg.PostID,
+		arg.Limit,
+		arg.Offset,
+		arg.CurrentUserID,
+		arg.ParentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCommentsByPopularRow
+	for rows.Next() {
+		var i ListCommentsByPopularRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ParentID,
+			&i.Content,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+			&i.AuthorID,
+			&i.AuthorName,
+			&i.UserVote,
+			&i.ReplyCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removeCommentVote = `-- name: RemoveCommentVote :exec
 DELETE FROM comment_votes WHERE comment_id = $1 AND user_id = $2
 `

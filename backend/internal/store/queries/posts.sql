@@ -36,6 +36,17 @@ AND (sqlc.narg('cursor')::timestamp IS NULL OR posts.created_at > sqlc.narg('cur
 ORDER BY posts.created_at ASC
 LIMIT $1;
 
+-- name: ListPostsByPopular :many
+SELECT posts.id, posts.title, posts.category, posts.created_at, posts.updated_at, posts.score,
+    users.name AS author_name, users.id AS author_id,
+    COALESCE(pv.vote,0)::smallint AS user_vote
+FROM posts
+JOIN users ON posts.user_id = users.id
+LEFT JOIN post_votes pv ON pv.post_id = posts.id AND pv.user_id = sqlc.narg('current_user_id')::uuid
+WHERE (sqlc.narg('category')::post_category IS NULL OR posts.category = sqlc.narg('category'))
+ORDER BY posts.score DESC, posts.created_at DESC
+LIMIT $1 OFFSET $2;
+
 -- name: UpdatePost :one
 UPDATE posts
 SET title = $3, content = $4, category = $5, updated_at = $6

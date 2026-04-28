@@ -55,7 +55,9 @@ export default async function Forum({
   }
 
   const resolvedParams = await searchParams;
-  const sort = resolvedParams.sort === "asc" ? "asc" : "desc";
+  let sort: "desc" | "asc" | "popular" = "desc";
+  if (resolvedParams.sort === "asc") sort = "asc";
+  if (resolvedParams.sort === "popular") sort = "popular";
   const posts = await getPosts(sort);
 
   return (

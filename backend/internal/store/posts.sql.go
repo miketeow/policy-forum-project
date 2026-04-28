@@ -264,6 +264,72 @@ func (q *Queries) ListPostsByOldest(ctx context.Context, arg ListPostsByOldestPa
 	return items, nil
 }
 
+const listPostsByPopular = `-- name: ListPostsByPopular :many
+SELECT posts.id, posts.title, posts.category, posts.created_at, posts.updated_at, posts.score,
+    users.name AS author_name, users.id AS author_id,
+    COALESCE(pv.vote,0)::smallint AS user_vote
+FROM posts
+JOIN users ON posts.user_id = users.id
+LEFT JOIN post_votes pv ON pv.post_id = posts.id AND pv.user_id = $3::uuid
+WHERE ($4::post_category IS NULL OR posts.category = $4)
+ORDER BY posts.score DESC, posts.created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListPostsByPopularParams struct {
+	Limit         int32            `json:"limit"`
+	Offset        int32            `json:"offset"`
+	CurrentUserID pgtype.UUID      `json:"current_user_id"`
+	Category      NullPostCategory `json:"category"`
+}
+
+type ListPostsByPopularRow struct {
+	ID         uuid.UUID    `json:"id"`
+	Title      string       `json:"title"`
+	Category   PostCategory `json:"category"`
+	CreatedAt  time.Time    `json:"created_at"`
+	UpdatedAt  time.Time    `json:"updated_at"`
+	Score      int32        `json:"score"`
+	AuthorName string       `json:"author_name"`
+	AuthorID   uuid.UUID    `json:"author_id"`
+	UserVote   int16        `json:"user_vote"`
+}
+
+func (q *Queries) ListPostsByPopular(ctx context.Context, arg ListPostsByPopularParams) ([]ListPostsByPopularRow, error) {
+	rows, err := q.db.Query(ctx, listPostsByPopular,
+		arg.Limit,
+		arg.Offset,
+		arg.CurrentUserID,
+		arg.Category,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPostsByPopularRow
+	for rows.Next() {
+		var i ListPostsByPopularRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Category,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+			&i.AuthorName,
+			&i.AuthorID,
+			&i.UserVote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removePostVote = `-- name: RemovePostVote :exec
 DELETE FROM post_votes WHERE post_id = $1 AND user_id = $2
 `

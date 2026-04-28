@@ -14,15 +14,16 @@ import { fetchPostAction } from "@/app/actions/forum";
 
 interface PostListProps {
   initialPosts: Post[];
-  initialSort: "asc" | "desc";
+  initialSort: "asc" | "desc" | "popular";
 }
 
 export function PostList({ initialPosts, initialSort }: PostListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const sortOrder = (searchParams.get("sort") as "desc" | "asc") || initialSort;
+  const sortOrder =
+    (searchParams.get("sort") as "desc" | "asc" | "popular") || initialSort;
 
-  const handleSortChange = (newSort: "desc" | "asc") => {
+  const handleSortChange = (newSort: "desc" | "asc" | "popular") => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("sort", newSort);
 
@@ -46,12 +47,15 @@ export function PostList({ initialPosts, initialSort }: PostListProps) {
       pageParams: [0], // cursor for first page is 0
     },
     // how to figure out the next cursor, TanStack provides the "lastPage" which is the array of 20 posts we just fetched
-    getNextPageParam: (lastPage) => {
+    getNextPageParam: (lastPage, allPages) => {
       // If Go backend return less than 20 items or an empty array
       // it means we hit the end of the database, hence return undefined to notify
       // proceed to set hasNextPage as false
       if (!lastPage || lastPage.length < 20) {
         return undefined;
+      }
+      if (sortOrder === "popular") {
+        return allPages.length * 20;
       }
       const lastPost = lastPage[lastPage.length - 1];
       return lastPost.created_at;
@@ -85,7 +89,12 @@ export function PostList({ initialPosts, initialSort }: PostListProps) {
               size="sm"
               className="text-muted-foreground"
             >
-              Sort by: {sortOrder === "desc" ? "Newest" : "Oldest"}
+              Sort by:{" "}
+              {sortOrder === "desc"
+                ? "Newest"
+                : sortOrder === "asc"
+                  ? "Oldest"
+                  : "Popular"}
             </Button>
           </DropdownMenuTrigger>
 
@@ -95,6 +104,9 @@ export function PostList({ initialPosts, initialSort }: PostListProps) {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleSortChange("asc")}>
               Oldest
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleSortChange("popular")}>
+              Popular
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
