@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { getSession } from "@/lib/session";
-import { formatDate } from "@/lib/utils";
+import { formatDate, getCategoryColor } from "@/lib/utils";
 import { redirect } from "next/navigation";
 import { CreateCommentForm } from "../_components/create-comment-form";
 import { BreadcrumbNav } from "../_components/breadcumb-nav";
@@ -8,6 +8,7 @@ import { CommentSection } from "../_components/comment-section";
 import { PostAction } from "../_components/post-actions";
 import { VoteButton } from "../_components/vote-button";
 import { cookies } from "next/headers";
+import { PendingPostPoller } from "../_components/pending-post-poller";
 
 interface PostDetailPageProps {
   params: Promise<{ postId: string }>;
@@ -88,11 +89,16 @@ export default async function PostDetailPage({
 
   return (
     <div className="flex flex-col mx-auto w-full max-w-3xl px-4 gap-8 py-8">
+      {post.category === "PENDING" && <PendingPostPoller postId={post.id} />}
       <BreadcrumbNav items={breadcrumbs} />
       <div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Badge>{post.category}</Badge>
+            <Badge
+              className={`text-xs text-white border-none transition-colors ${getCategoryColor(post.category)}`}
+            >
+              {post.category}
+            </Badge>
             <span className="text-sm text-muted-foreground">
               {formatDate(post.created_at)}
             </span>

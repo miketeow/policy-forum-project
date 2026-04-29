@@ -17,9 +17,10 @@ import (
 
 // dependency injection container
 type application struct {
-	jwtSecret []byte
-	db        *store.Queries
-	pool      *pgxpool.Pool
+	jwtSecret    []byte
+	db           *store.Queries
+	pool         *pgxpool.Pool
+	geminiAPIKey string
 }
 
 func main() {
@@ -43,11 +44,18 @@ func main() {
 
 	log.Println("Successfully connect to the PostgreSQL database")
 
+	// gemini api key
+	geminiKey := os.Getenv("GEMINI_API_KEY")
+	if geminiKey == "" {
+		log.Fatal("GEMINI_API_KEY is not set in .env")
+	}
+
 	// Initialize the application atruct with the sqlc-generated store
 	app := &application{
-		db:        store.New(pool),
-		pool:      pool,
-		jwtSecret: []byte(jwtSecret),
+		db:           store.New(pool),
+		pool:         pool,
+		jwtSecret:    []byte(jwtSecret),
+		geminiAPIKey: geminiKey,
 	}
 
 	// Create private router

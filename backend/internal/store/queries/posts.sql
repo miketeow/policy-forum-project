@@ -96,3 +96,8 @@ WHERE pv.user_id = $1 AND pv.vote = 1
 AND (sqlc.narg('cursor')::timestamp IS NULL OR posts.created_at < sqlc.narg('cursor'))
 ORDER BY posts.created_at DESC
 LIMIT $2;
+
+-- name: UpdatePostCategory :exec
+UPDATE posts
+SET category = $2, updated_at = $3
+WHERE id = $1;

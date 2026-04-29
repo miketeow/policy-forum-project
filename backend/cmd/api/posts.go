@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -76,6 +77,24 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 		writeJSONError(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
+
+	// new go routine in background, to create correct category for the post
+	go func(postID uuid.UUID, postTitle, postContent string) {
+		// call gemini
+		aiCategory := app.categorizeWithAI(postTitle, postContent)
+		log.Printf("AI Categorized Post %s as: %s", postID.String(), aiCategory)
+
+		// update the database
+		// use context.Background() because the original HTTP request context
+		// will be cancelled the moment the user gets their HTTP response
+		err := app.db.UpdatePostCategory(context.Background(), store.UpdatePostCategoryParams{
+			ID:       postID,
+			Category: store.PostCategory(aiCategory),
+		})
+		if err != nil {
+			log.Printf("Failed to update category in DB: %v", err)
+		}
+	}(post.ID, post.Title, post.Content) // pass variables here
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

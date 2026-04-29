@@ -2,7 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate } from "@/lib/utils";
+import { formatDate, getCategoryColor } from "@/lib/utils";
 import Link from "next/link";
 import { VoteButton } from "./vote-button";
 
@@ -29,7 +29,9 @@ export function PostCard({
     <Card className="transition-all hover:shadow-lg cursor-pointer relative group">
       <CardHeader>
         <div className="flex items-center justify-between mb-2">
-          <Badge variant="secondary" className="text-xs">
+          <Badge
+            className={`text-xs text-white border-none transition-colors ${getCategoryColor(post.category)}`}
+          >
             {post.category}
           </Badge>
 

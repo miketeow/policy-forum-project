@@ -39,6 +39,7 @@ type Querier interface {
 	UpdateComment(ctx context.Context, arg UpdateCommentParams) (Comment, error)
 	UpdateCommentScore(ctx context.Context, arg UpdateCommentScoreParams) error
 	UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, error)
+	UpdatePostCategory(ctx context.Context, arg UpdatePostCategoryParams) error
 	UpdatePostScore(ctx context.Context, arg UpdatePostScoreParams) error
 }
 

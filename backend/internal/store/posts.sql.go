@@ -534,6 +534,23 @@ func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, e
 	return i, err
 }
 
+const updatePostCategory = `-- name: UpdatePostCategory :exec
+UPDATE posts
+SET category = $2, updated_at = $3
+WHERE id = $1
+`
+
+type UpdatePostCategoryParams struct {
+	ID        uuid.UUID    `json:"id"`
+	Category  PostCategory `json:"category"`
+	UpdatedAt time.Time    `json:"updated_at"`
+}
+
+func (q *Queries) UpdatePostCategory(ctx context.Context, arg UpdatePostCategoryParams) error {
+	_, err := q.db.Exec(ctx, updatePostCategory, arg.ID, arg.Category, arg.UpdatedAt)
+	return err
+}
+
 const updatePostScore = `-- name: UpdatePostScore :exec
 UPDATE posts SET score = score + $2 WHERE id = $1
 `

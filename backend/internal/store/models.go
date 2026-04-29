@@ -16,13 +16,14 @@ import (
 type PostCategory string
 
 const (
-	PostCategoryPENDING       PostCategory = "PENDING"
-	PostCategoryURBANPLANNING PostCategory = "URBAN_PLANNING"
-	PostCategoryTRANSPORT     PostCategory = "TRANSPORT"
-	PostCategoryECONOMY       PostCategory = "ECONOMY"
-	PostCategoryHEALTHCARE    PostCategory = "HEALTHCARE"
-	PostCategoryEDUCATION     PostCategory = "EDUCATION"
-	PostCategoryGENERAL       PostCategory = "GENERAL"
+	PostCategoryPENDING        PostCategory = "PENDING"
+	PostCategoryINFRASTRUCTURE PostCategory = "INFRASTRUCTURE"
+	PostCategoryECONOMY        PostCategory = "ECONOMY"
+	PostCategoryHEALTHCARE     PostCategory = "HEALTHCARE"
+	PostCategoryEDUCATION      PostCategory = "EDUCATION"
+	PostCategoryENVIRONMENT    PostCategory = "ENVIRONMENT"
+	PostCategorySAFETY         PostCategory = "SAFETY"
+	PostCategoryOTHER          PostCategory = "OTHER"
 )
 
 func (e *PostCategory) Scan(src interface{}) error {

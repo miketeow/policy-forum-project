@@ -29,6 +29,7 @@ export function PostList({ initialPosts, initialSort }: PostListProps) {
 
     router.push(`?${params.toString()}`, { scroll: false });
   };
+
   const {
     data,
     status,
@@ -45,6 +46,22 @@ export function PostList({ initialPosts, initialSort }: PostListProps) {
     initialData: {
       pages: [initialPosts], // first page
       pageParams: [0], // cursor for first page is 0
+    },
+    refetchInterval: (query) => {
+      const currentPages = query.state.data?.pages as Post[][] | undefined;
+
+      if (!currentPages) {
+        const initialHasPending = initialPosts.some(
+          (post) => post.category === "PENDING",
+        );
+        return initialHasPending ? 2000 : false;
+      }
+
+      const hasPending = currentPages.some((page) =>
+        page.some((post: Post) => post.category === "PENDING"),
+      );
+
+      return hasPending ? 2000 : false;
     },
     // how to figure out the next cursor, TanStack provides the "lastPage" which is the array of 20 posts we just fetched
     getNextPageParam: (lastPage, allPages) => {

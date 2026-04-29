@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import { CommentsDetail } from "../forum/_components/comment-section";
+import { CommentNode } from "../forum/_components/comment-thread";
 
 export interface ActionState {
   success: boolean;
@@ -419,7 +419,7 @@ export async function fetchCommentsAction(
   parentId: string | null,
   pageParam: number | string = 0,
   sort: string = "desc",
-): Promise<CommentsDetail[]> {
+): Promise<CommentNode[]> {
   const cookieStore = await cookies();
   const token = cookieStore.get("session")?.value;
 
@@ -448,4 +448,30 @@ export async function fetchCommentsAction(
   if (!res.ok) throw new Error("Failed to fetch comments");
 
   return res.json();
+}
+
+export async function checkPostCategoryAction(
+  postId: string,
+): Promise<string | null> {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("session")?.value;
+
+    const headers = new Headers();
+    // attach the token
+    if (token) {
+      headers.append("Authorization", `Bearer ${token}`);
+    }
+    const res = await fetch(`http://localhost:8080/api/posts/${postId}`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+
+    const post = await res.json();
+    return post.category;
+  } catch (error) {
+    console.error("Failed to check category", error);
+    return null;
+  }
 }
