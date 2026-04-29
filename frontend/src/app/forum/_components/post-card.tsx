@@ -18,7 +18,13 @@ export interface Post {
   user_vote: number;
 }
 
-export function PostCard({ post }: { post: Post }) {
+export function PostCard({
+  post,
+  isDashboardView,
+}: {
+  post: Post;
+  isDashboardView?: boolean;
+}) {
   return (
     <Card className="transition-all hover:shadow-lg cursor-pointer relative group">
       <CardHeader>
@@ -47,12 +53,13 @@ export function PostCard({ post }: { post: Post }) {
               {post.author_name}
             </span>
           </div>
-
-          <VoteButton
-            postId={post.id}
-            initialScore={post.score}
-            initialUserVote={post.user_vote}
-          />
+          {!isDashboardView && (
+            <VoteButton
+              postId={post.id}
+              initialScore={post.score}
+              initialUserVote={post.user_vote}
+            />
+          )}
         </div>
       </CardHeader>
     </Card>

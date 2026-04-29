@@ -79,3 +79,29 @@ DELETE FROM comment_votes WHERE comment_id = $1 AND user_id = $2;
 
 -- name: UpdateCommentScore :exec
 UPDATE comments SET score = score + $2 WHERE id = $1;
+
+-- name: ListCommentsByUser :many
+SELECT comments.id, comments.post_id, comments.parent_id, comments.user_id, comments.content, comments.created_at, comments.updated_at,
+       comments.score,
+       users.name AS author_name,
+       COALESCE(cv.vote, 0)::smallint AS user_vote
+FROM comments
+JOIN users ON comments.user_id = users.id
+LEFT JOIN comment_votes cv ON cv.comment_id = comments.id AND cv.user_id = sqlc.narg('current_user_id')::uuid
+WHERE comments.user_id = $1
+AND (sqlc.narg('cursor')::timestamp IS NULL OR comments.created_at < sqlc.narg('cursor'))
+ORDER BY comments.created_at DESC
+LIMIT $2;
+
+-- name: ListUpvotedCommentsByUser :many
+SELECT comments.id, comments.post_id, comments.parent_id, comments.user_id, comments.content, comments.created_at, comments.updated_at,
+       comments.score,
+       users.name AS author_name,
+       1::smallint AS user_vote -- Hardcoded to 1 because they are in the upvoted list!
+FROM comments
+JOIN users ON comments.user_id = users.id
+JOIN comment_votes cv ON cv.comment_id = comments.id
+WHERE cv.user_id = $1 AND cv.vote = 1
+AND (sqlc.narg('cursor')::timestamp IS NULL OR comments.created_at < sqlc.narg('cursor'))
+ORDER BY comments.created_at DESC
+LIMIT $2;

@@ -72,3 +72,27 @@ DELETE FROM post_votes WHERE post_id = $1 AND user_id = $2;
 
 -- name: UpdatePostScore :exec
 UPDATE posts SET score = score + $2 WHERE id = $1;
+
+-- name: ListPostsByUser :many
+SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, posts.score,
+    users.name AS author_name, users.id AS author_id,
+    COALESCE(pv.vote,0)::smallint AS user_vote
+FROM posts
+JOIN users ON posts.user_id = users.id
+LEFT JOIN post_votes pv ON pv.post_id = posts.id AND pv.user_id = sqlc.narg('current_user_id')::uuid
+WHERE posts.user_id = $1
+AND (sqlc.narg('cursor')::timestamp IS NULL OR posts.created_at < sqlc.narg('cursor'))
+ORDER BY posts.created_at DESC
+LIMIT $2;
+
+-- name: ListUpvotedPostsByUser :many
+SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, posts.score,
+    users.name AS author_name, users.id AS author_id,
+    1::smallint AS user_vote -- We hardcode 1 because they must have upvoted it to be in this list!
+FROM posts
+JOIN users ON posts.user_id = users.id
+JOIN post_votes pv ON pv.post_id = posts.id
+WHERE pv.user_id = $1 AND pv.vote = 1
+AND (sqlc.narg('cursor')::timestamp IS NULL OR posts.created_at < sqlc.narg('cursor'))
+ORDER BY posts.created_at DESC
+LIMIT $2;

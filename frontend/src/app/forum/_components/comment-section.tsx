@@ -1,7 +1,7 @@
 "use client";
 
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { CommentThread } from "./comment-thread";
+import { CommentNode, CommentThread } from "./comment-thread";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,19 +11,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useRouter, useSearchParams } from "next/navigation";
 import { fetchCommentsAction } from "@/app/actions/forum";
-
-export interface CommentsDetail {
-  id: string;
-  parent_id: string | null;
-  content: string;
-  created_at: string;
-  updated_at: string;
-  author_id: string;
-  author_name: string;
-  reply_count: number;
-  score: number;
-  user_vote: number;
-}
 
 export function CommentSection({
   postId,
@@ -111,7 +98,7 @@ export function CommentSection({
         <div className="flex flex-col gap-4">
           {data.pages.map((page, i) => (
             <div key={i} className="flex flex-col gap-4">
-              {page.map((comment: CommentsDetail) => (
+              {page.map((comment: CommentNode) => (
                 <CommentThread
                   key={comment.id}
                   comment={comment}

@@ -16,16 +16,19 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/utils";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreVertical } from "lucide-react";
+import { ExternalLink, MoreVertical } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { CommentVoteButton } from "./comment-vote-button";
+import Link from "next/link";
 
 export interface CommentNode {
   id: string;
+  post_id: string;
   parent_id: string | null;
   content: string;
   created_at: string;
+  updated_at: string;
   author_name: string;
   author_id: string;
   reply_count: number;
@@ -37,10 +40,14 @@ export function CommentThread({
   comment,
   postId,
   currentUserId,
+  showPostLink,
+  isDashboardView,
 }: {
   comment: CommentNode;
   postId: string;
   currentUserId: string;
+  showPostLink?: boolean;
+  isDashboardView?: boolean;
 }) {
   const [isReplying, setIsReplying] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -127,6 +134,22 @@ export function CommentThread({
             </span>
           </div>
 
+          {/*view post link for dashboard page*/}
+          <div className="flex items-center gap-2">
+            {showPostLink && (
+              <Link href={`/forum/${postId}`}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1"
+                >
+                  <ExternalLink size={12} />
+                  View Post
+                </Button>
+              </Link>
+            )}
+          </div>
+
           {isOwner && (
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
@@ -175,30 +198,35 @@ export function CommentThread({
         )}
 
         <div className="mt-2 flex gap-4 items-center">
-          <CommentVoteButton
-            commentId={comment.id}
-            initialScore={comment.score}
-            initialUserVote={comment.user_vote}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 text-muted-foreground hover:text-foreground text-xs"
-            onClick={() => setIsReplying(!isReplying)}
-          >
-            {isReplying ? "Cancel" : "Reply"}
-          </Button>
-          {comment.reply_count > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-xs text-blue-500 "
-              onClick={() => setShowReply(!showReply)}
-            >
-              {showReply
-                ? "Hide Replies"
-                : `Show Replies (${comment.reply_count})`}
-            </Button>
+          {!isDashboardView && (
+            <>
+              <CommentVoteButton
+                commentId={comment.id}
+                initialScore={comment.score}
+                initialUserVote={comment.user_vote}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-muted-foreground hover:text-foreground text-xs"
+                onClick={() => setIsReplying(!isReplying)}
+              >
+                {isReplying ? "Cancel" : "Reply"}
+              </Button>
+
+              {comment.reply_count > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-xs text-blue-500 "
+                  onClick={() => setShowReply(!showReply)}
+                >
+                  {showReply
+                    ? "Hide Replies"
+                    : `Show Replies (${comment.reply_count})`}
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>

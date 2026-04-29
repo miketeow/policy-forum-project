@@ -24,9 +24,13 @@ type Querier interface {
 	ListCommentsByNewest(ctx context.Context, arg ListCommentsByNewestParams) ([]ListCommentsByNewestRow, error)
 	ListCommentsByOldest(ctx context.Context, arg ListCommentsByOldestParams) ([]ListCommentsByOldestRow, error)
 	ListCommentsByPopular(ctx context.Context, arg ListCommentsByPopularParams) ([]ListCommentsByPopularRow, error)
+	ListCommentsByUser(ctx context.Context, arg ListCommentsByUserParams) ([]ListCommentsByUserRow, error)
 	ListPostsByNewest(ctx context.Context, arg ListPostsByNewestParams) ([]ListPostsByNewestRow, error)
 	ListPostsByOldest(ctx context.Context, arg ListPostsByOldestParams) ([]ListPostsByOldestRow, error)
 	ListPostsByPopular(ctx context.Context, arg ListPostsByPopularParams) ([]ListPostsByPopularRow, error)
+	ListPostsByUser(ctx context.Context, arg ListPostsByUserParams) ([]ListPostsByUserRow, error)
+	ListUpvotedCommentsByUser(ctx context.Context, arg ListUpvotedCommentsByUserParams) ([]ListUpvotedCommentsByUserRow, error)
+	ListUpvotedPostsByUser(ctx context.Context, arg ListUpvotedPostsByUserParams) ([]ListUpvotedPostsByUserRow, error)
 	RemoveCommentVote(ctx context.Context, arg RemoveCommentVoteParams) error
 	RemovePostVote(ctx context.Context, arg RemovePostVoteParams) error
 	SetCommentVote(ctx context.Context, arg SetCommentVoteParams) error

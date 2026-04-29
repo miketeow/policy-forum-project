@@ -330,6 +330,138 @@ func (q *Queries) ListPostsByPopular(ctx context.Context, arg ListPostsByPopular
 	return items, nil
 }
 
+const listPostsByUser = `-- name: ListPostsByUser :many
+SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, posts.score,
+    users.name AS author_name, users.id AS author_id,
+    COALESCE(pv.vote,0)::smallint AS user_vote
+FROM posts
+JOIN users ON posts.user_id = users.id
+LEFT JOIN post_votes pv ON pv.post_id = posts.id AND pv.user_id = $3::uuid
+WHERE posts.user_id = $1
+AND ($4::timestamp IS NULL OR posts.created_at < $4)
+ORDER BY posts.created_at DESC
+LIMIT $2
+`
+
+type ListPostsByUserParams struct {
+	UserID        uuid.UUID        `json:"user_id"`
+	Limit         int32            `json:"limit"`
+	CurrentUserID pgtype.UUID      `json:"current_user_id"`
+	Cursor        pgtype.Timestamp `json:"cursor"`
+}
+
+type ListPostsByUserRow struct {
+	ID         uuid.UUID    `json:"id"`
+	Title      string       `json:"title"`
+	Content    string       `json:"content"`
+	Category   PostCategory `json:"category"`
+	CreatedAt  time.Time    `json:"created_at"`
+	UpdatedAt  time.Time    `json:"updated_at"`
+	Score      int32        `json:"score"`
+	AuthorName string       `json:"author_name"`
+	AuthorID   uuid.UUID    `json:"author_id"`
+	UserVote   int16        `json:"user_vote"`
+}
+
+func (q *Queries) ListPostsByUser(ctx context.Context, arg ListPostsByUserParams) ([]ListPostsByUserRow, error) {
+	rows, err := q.db.Query(ctx, listPostsByUser,
+		arg.UserID,
+		arg.Limit,
+		arg.CurrentUserID,
+		arg.Cursor,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPostsByUserRow
+	for rows.Next() {
+		var i ListPostsByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Content,
+			&i.Category,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+			&i.AuthorName,
+			&i.AuthorID,
+			&i.UserVote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUpvotedPostsByUser = `-- name: ListUpvotedPostsByUser :many
+SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, posts.score,
+    users.name AS author_name, users.id AS author_id,
+    1::smallint AS user_vote -- We hardcode 1 because they must have upvoted it to be in this list!
+FROM posts
+JOIN users ON posts.user_id = users.id
+JOIN post_votes pv ON pv.post_id = posts.id
+WHERE pv.user_id = $1 AND pv.vote = 1
+AND ($3::timestamp IS NULL OR posts.created_at < $3)
+ORDER BY posts.created_at DESC
+LIMIT $2
+`
+
+type ListUpvotedPostsByUserParams struct {
+	UserID uuid.UUID        `json:"user_id"`
+	Limit  int32            `json:"limit"`
+	Cursor pgtype.Timestamp `json:"cursor"`
+}
+
+type ListUpvotedPostsByUserRow struct {
+	ID         uuid.UUID    `json:"id"`
+	Title      string       `json:"title"`
+	Content    string       `json:"content"`
+	Category   PostCategory `json:"category"`
+	CreatedAt  time.Time    `json:"created_at"`
+	UpdatedAt  time.Time    `json:"updated_at"`
+	Score      int32        `json:"score"`
+	AuthorName string       `json:"author_name"`
+	AuthorID   uuid.UUID    `json:"author_id"`
+	UserVote   int16        `json:"user_vote"`
+}
+
+func (q *Queries) ListUpvotedPostsByUser(ctx context.Context, arg ListUpvotedPostsByUserParams) ([]ListUpvotedPostsByUserRow, error) {
+	rows, err := q.db.Query(ctx, listUpvotedPostsByUser, arg.UserID, arg.Limit, arg.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUpvotedPostsByUserRow
+	for rows.Next() {
+		var i ListUpvotedPostsByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Content,
+			&i.Category,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+			&i.AuthorName,
+			&i.AuthorID,
+			&i.UserVote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removePostVote = `-- name: RemovePostVote :exec
 DELETE FROM post_votes WHERE post_id = $1 AND user_id = $2
 `

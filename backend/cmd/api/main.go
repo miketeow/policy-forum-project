@@ -81,6 +81,12 @@ func main() {
 
 	mux.HandleFunc("POST /api/comments/{commentId}/vote", app.requireAuth(app.voteCommentHandler))
 
+	// user dashboard routes
+	mux.HandleFunc("GET /api/users/me/posts", app.requireAuth(app.getUserPostsHandler))
+	mux.HandleFunc("GET /api/users/me/comments", app.requireAuth(app.getUserCommentsHandler))
+	mux.HandleFunc("GET /api/users/me/upvoted/posts", app.requireAuth(app.getUserUpvotedPostsHandler))
+	mux.HandleFunc("GET /api/users/me/upvoted/comments", app.requireAuth(app.getUserUpvotedCommentsHandler))
+
 	handlerWithCORS := corsMiddleware(mux)
 
 	// Configure the HTTP server with strict timeout
