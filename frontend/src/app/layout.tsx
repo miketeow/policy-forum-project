@@ -5,6 +5,8 @@ import { Toaster } from "sonner";
 import { Providers } from "@/components/providers/theme-providers";
 import { Header } from "@/components/layout/header";
 import { ReactQueryProvider } from "@/components/providers/query-provider";
+import { SearchProvider } from "@/components/providers/search-provider";
+import { CommandMenu } from "@/components/layout/command-menu";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,9 +40,12 @@ export default function RootLayout({
       >
         <ReactQueryProvider>
           <Providers>
-            <Header />
-            <main className="flex-1 pt-24 pb-12">{children}</main>
-            <Toaster />
+            <SearchProvider>
+              <Header />
+              <main className="flex-1 pt-24 pb-12">{children}</main>
+              <Toaster />
+              <CommandMenu />
+            </SearchProvider>
           </Providers>
         </ReactQueryProvider>
       </body>
