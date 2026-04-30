@@ -128,7 +128,9 @@ export function CommentThread({
       <div className="flex flex-col gap-2 p-4 rounded-lg bg-card border shadow-sm">
         <div className="flex justify-between items-center">
           <div>
-            <span className="font-semibold text-sm">{comment.author_name}</span>
+            <span className="font-semibold text-sm">
+              {comment.author_name}{" "}
+            </span>
             <span className="text-xs text-muted-foreground">
               {formatDate(comment.created_at)}
             </span>

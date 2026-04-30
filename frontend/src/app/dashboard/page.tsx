@@ -17,6 +17,7 @@ import { redirect } from "next/navigation";
 import { UserPostList } from "./_components/user-post-list";
 import { UserCommentList } from "./_components/user-comment-list";
 import { UserUpvotedList } from "./_components/user-upvoted-list";
+import { cookies } from "next/headers";
 
 interface UserProfile {
   id: string;
@@ -28,6 +29,13 @@ interface UserProfile {
 }
 export default async function Dashboard() {
   const user: UserProfile = await getSession();
+
+  const cookieStore = await cookies();
+  const hasCookie = cookieStore.has("session");
+
+  if (!user && hasCookie) {
+    redirect("/api/auth/logout");
+  }
 
   if (!user) {
     redirect("/sign-in");

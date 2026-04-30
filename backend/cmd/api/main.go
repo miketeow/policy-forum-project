@@ -204,13 +204,14 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
 
 	user, err := app.db.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
-		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
+		log.Printf("⚠️ Login failed: Email not found (%s)", req.Email)
+		writeJSONError(w, http.StatusUnauthorized, "Incorrect email or password")
 		return
 	}
 
@@ -218,14 +219,14 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	match, err := auth.ComparePasswordAndHash(req.Password, user.HashedPassword)
 
 	if err != nil || !match {
-		http.Error(w, "Invalid email or password", http.StatusUnauthorized)
+		log.Printf("⚠️ Login failed: Password mismatch for user %s", user.Email)
+		writeJSONError(w, http.StatusUnauthorized, "Invalid email or password")
 		return
 	}
 
 	tokenString, err := auth.GenerateToken(app.jwtSecret, user.ID, user.KycStatus)
 	if err != nil {
-
-		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "Failed to generate token")
 		return
 	}
 

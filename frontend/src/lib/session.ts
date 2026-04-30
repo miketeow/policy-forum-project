@@ -16,7 +16,8 @@ export const getSession = cache(async () => {
       cache: "no-store",
     });
     if (!res.ok) {
-      if (res.status === 401 || res.status === 403) {
+      // BEST PRACTICE: Treat 404 (Deleted User) identically to 401 (Invalid Token)
+      if (res.status === 401 || res.status === 403 || res.status === 404) {
         return null;
       }
 

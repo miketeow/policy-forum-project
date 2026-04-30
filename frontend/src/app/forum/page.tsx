@@ -50,6 +50,13 @@ export default async function Forum({
 }) {
   const user: UserProfile = await getSession();
 
+  const cookieStore = await cookies();
+  const hasCookie = cookieStore.has("session");
+
+  if (!user && hasCookie) {
+    redirect("/api/auth/logout");
+  }
+
   if (!user) {
     redirect("/sign-in");
   }

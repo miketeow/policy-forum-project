@@ -3,7 +3,7 @@ include .env
 
 export
 
-.PHONY: db-up db-down db-status db-console sqlc-gen
+.PHONY: db-up db-down db-status db-console sqlc-gen db-seed
 
 sqlc-gen:
 	sqlc generate
@@ -19,3 +19,6 @@ db-status:
 
 db-console:
 	psql "$(PGURL)"
+
+db-seed:
+	go run cmd/seed/main.go

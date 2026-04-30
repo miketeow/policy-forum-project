@@ -31,22 +31,39 @@ export default function SignInForm() {
   });
 
   async function onSubmit(values: z.infer<typeof SignInSchema>) {
-    const res = await fetch(getApiUrl("/api/auth/login"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(values),
-    });
+    try {
+      const res = await fetch(getApiUrl("/api/auth/login"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(values),
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      await createSession(data.token);
-      toast.success(data.message);
-      // navigate without polluting the back history
-      router.push("/dashboard");
-    } else {
-      toast.error("Something went wrong");
+      if (res.ok) {
+        const data = await res.json();
+        await createSession(data.token);
+        toast.success(data.message || "Successfully signed in");
+        // navigate without polluting the back history
+        router.push("/dashboard");
+        return;
+      }
+
+      const contentType = res.headers.get("content-type");
+      let errorMessage = "Authentication failed";
+      if (contentType && contentType.includes("application/json")) {
+        const errorData = await res.json();
+        errorMessage = errorData.error || errorMessage;
+      } else {
+        console.error(`[Auth] Non-JSON error response: ${res.status}`);
+        errorMessage = `Server error (${res.status}). Please try again later.`;
+      }
+      toast.error(errorMessage);
+    } catch (error) {
+      console.error("[Auth] Network or CORS error:", error);
+      toast.error(
+        "Unable to connect to the server. Please check your internet connection.",
+      );
     }
   }
 
