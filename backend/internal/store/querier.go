@@ -21,6 +21,7 @@ type Querier interface {
 	GetPostVote(ctx context.Context, arg GetPostVoteParams) (int16, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
+	GlobalSearch(ctx context.Context, searchQuery string) ([]GlobalSearchRow, error)
 	ListCommentsByNewest(ctx context.Context, arg ListCommentsByNewestParams) ([]ListCommentsByNewestRow, error)
 	ListCommentsByOldest(ctx context.Context, arg ListCommentsByOldestParams) ([]ListCommentsByOldestRow, error)
 	ListCommentsByPopular(ctx context.Context, arg ListCommentsByPopularParams) ([]ListCommentsByPopularRow, error)

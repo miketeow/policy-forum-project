@@ -95,6 +95,8 @@ func main() {
 	mux.HandleFunc("GET /api/users/me/upvoted/posts", app.requireAuth(app.getUserUpvotedPostsHandler))
 	mux.HandleFunc("GET /api/users/me/upvoted/comments", app.requireAuth(app.getUserUpvotedCommentsHandler))
 
+	mux.HandleFunc("GET /v1/search", app.searchHandler)
+
 	handlerWithCORS := corsMiddleware(mux)
 
 	// Configure the HTTP server with strict timeout
