@@ -53,7 +53,7 @@ func (q *Queries) CreateComments(ctx context.Context, arg CreateCommentsParams) 
 	return i, err
 }
 
-const deleteComment = `-- name: DeleteComment :exec
+const deleteComment = `-- name: DeleteComment :execrows
 DELETE FROM comments
 WHERE id = $1 AND user_id = $2
 `
@@ -63,9 +63,12 @@ type DeleteCommentParams struct {
 	UserID uuid.UUID `json:"user_id"`
 }
 
-func (q *Queries) DeleteComment(ctx context.Context, arg DeleteCommentParams) error {
-	_, err := q.db.Exec(ctx, deleteComment, arg.ID, arg.UserID)
-	return err
+func (q *Queries) DeleteComment(ctx context.Context, arg DeleteCommentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteComment, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getCommentVote = `-- name: GetCommentVote :one

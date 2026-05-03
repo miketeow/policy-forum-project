@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
 	"net/http"
 	"policy-forum-backend/internal/store"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,23 +14,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type CreatePostReqeust struct {
+type CreatePostRequest struct {
 	Title    string `json:"title"`
 	Content  string `json:"content"`
 	Category string `json:"category"`
 }
 
-type UpdatePostReqeust struct {
+type UpdatePostRequest struct {
 	Title    string `json:"title"`
 	Content  string `json:"content"`
 	Category string `json:"category"`
-}
-
-type PaginationRequest struct {
-	Limit  int
-	Cursor time.Time
-	Sort   string
-	Offset int32
 }
 
 type VotePostRequest struct {
@@ -39,17 +31,17 @@ type VotePostRequest struct {
 }
 
 func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request) {
-	// get user id from the jwt
 	userId, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	// parse the client payload
-	var req CreatePostReqeust
+	var req CreatePostRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		cleanErr := errors.New("the provided JSON payload is malformed or invalid")
+		app.badRequestResponse(w, r, cleanErr)
 		return
 	}
 
@@ -70,11 +62,11 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	// execuet the insert
+	// execute the insert
 	post, err := app.db.CreatePost(r.Context(), args)
 	if err != nil {
-		log.Printf("Failed to create post: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "Internal Server Error")
+		wrappedErr := fmt.Errorf("failed to create post in database: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
@@ -82,7 +74,7 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 	go func(postID uuid.UUID, postTitle, postContent string) {
 		// call gemini
 		aiCategory := app.categorizeWithAI(postTitle, postContent)
-		log.Printf("AI Categorized Post %s as: %s", postID.String(), aiCategory)
+		app.logger.Printf("AI Categorized Post %s as: %s", postID.String(), aiCategory)
 
 		// update the database
 		// use context.Background() because the original HTTP request context
@@ -92,20 +84,26 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 			Category: store.PostCategory(aiCategory),
 		})
 		if err != nil {
-			log.Printf("Failed to update category in DB: %v", err)
+			app.logger.Printf("BACKGROUND TASK FAILED: failed to update post %s with AI category: %v", postID, err)
 		}
 	}(post.ID, post.Title, post.Content) // pass variables here
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(post)
-
+	err = app.writeJSON(w, http.StatusCreated, envelope{"post": post})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) {
 	var posts []store.ListPostsByNewestRow
 	var err error
-	pagination := parsePagination(r)
+
+	pagination, err := app.parsePagination(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
 	hasCursor := !pagination.Cursor.IsZero()
 
 	sortOrder := r.URL.Query().Get("sort")
@@ -157,15 +155,18 @@ func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err != nil {
-		log.Printf("DB Error in listPostHandler: %v", err)
-		writeJSONError(w, http.StatusBadRequest, "Failed to list posts")
+		wrappedErr := fmt.Errorf("failed to fetch posts from database: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 	// if no posts exist, make sure to return empty array instead of null
 	if posts == nil {
 		posts = []store.ListPostsByNewestRow{}
 	}
-	writeJSON(w, http.StatusOK, posts)
+	err = app.writeJSON(w, http.StatusOK, envelope{"posts": posts})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) getPostHandler(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +183,7 @@ func (app *application) getPostHandler(w http.ResponseWriter, r *http.Request) {
 	postId, err := uuid.Parse(idParam)
 
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid post ID format")
+		app.notFoundResponse(w, r)
 		return
 	}
 
@@ -191,33 +192,43 @@ func (app *application) getPostHandler(w http.ResponseWriter, r *http.Request) {
 		ID:            postId,
 		CurrentUserID: currentUserID,
 	})
+
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "Post not found")
+		if errors.Is(err, pgx.ErrNoRows) {
+			app.notFoundResponse(w, r)
+			return
+		}
+		wrappedErr := fmt.Errorf("failed to fetch post by id: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(post)
+	err = app.writeJSON(w, http.StatusOK, envelope{"post": post})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) updatePostHandler(w http.ResponseWriter, r *http.Request) {
-	postIDParam := r.PathValue("postId")
-	postId, err := uuid.Parse(postIDParam)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid post ID format")
-		return
-	}
 
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	var req UpdatePostReqeust
+	postIDParam := r.PathValue("postId")
+	postId, err := uuid.Parse(postIDParam)
+	if err != nil {
+		app.notFoundResponse(w, r)
+		return
+	}
+
+	var req UpdatePostRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		cleanErr := errors.New("the provided JSON payload is malformed or invalid")
+		app.badRequestResponse(w, r, cleanErr)
 		return
 	}
 
@@ -237,113 +248,99 @@ func (app *application) updatePostHandler(w http.ResponseWriter, r *http.Request
 	})
 
 	if err != nil {
-		log.Printf("Failed to update post: %v", err)
-		writeJSONError(w, http.StatusForbidden, "Not authorized to edit this post, or post does not exist")
+		// if wrong id or wrong users
+		if errors.Is(err, pgx.ErrNoRows) {
+			app.notFoundResponse(w, r)
+			return
+		}
+
+		// if database crash
+		wrappedErr := fmt.Errorf("failed to update post: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, updatedPost)
+	// background task: re-categorized modified content
+	go func(postID uuid.UUID, postTitle, postContent string) {
+		aiCategory := app.categorizeWithAI(postTitle, postContent)
+		app.logger.Printf("AI Re-Categorized Post %s as: %s", postID.String(), aiCategory)
 
+		err := app.db.UpdatePostCategory(context.Background(), store.UpdatePostCategoryParams{
+			ID:       postID,
+			Category: store.PostCategory(aiCategory),
+		})
+		if err != nil {
+			app.logger.Printf("BACKGROUND TASK FAILED: failed to update post %s with AI category: %v", postID, err)
+		}
+	}(updatedPost.ID, updatedPost.Title, updatedPost.Content)
+
+	err = app.writeJSON(w, http.StatusOK, envelope{"post": updatedPost})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) deletePostHandler(w http.ResponseWriter, r *http.Request) {
 	postIDParam := r.PathValue("postId")
 	postId, err := uuid.Parse(postIDParam)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid post ID format")
+		app.notFoundResponse(w, r)
 		return
 	}
 
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	err = app.db.DeletePost(r.Context(), store.DeletePostParams{
+	rowsAffected, err := app.db.DeletePost(r.Context(), store.DeletePostParams{
 		ID:     postId,
 		UserID: userID,
 	})
 
 	if err != nil {
-		log.Printf("Failed to delete post: %v", err)
-		writeJSONError(w, http.StatusForbidden, "Not authorized to delete this post, or post does not exist")
+		// if database crash
+		wrappedErr := fmt.Errorf("failed to delete post: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
+		return
+	}
+
+	if rowsAffected == 0 {
+		app.notFoundResponse(w, r)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func parsePagination(r *http.Request) PaginationRequest {
-	// default
-	req := PaginationRequest{
-		Limit:  20,
-		Sort:   "desc",
-		Offset: 0,
-	}
-
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
-			req.Limit = l
-		}
-	}
-
-	if cursorStr := r.URL.Query().Get("cursor"); cursorStr != "" {
-		layouts := []string{
-			time.RFC3339Nano,
-			time.RFC3339,
-			"2006-01-02T15:04:05.999999Z07:00",
-			"2006-01-02T15:04:05.999999", // Common Postgres format (no Z)
-			"2006-01-02 15:04:05.999999", // Space instead of T
-		}
-
-		var parsed time.Time
-		var err error
-		for _, layout := range layouts {
-			parsed, err = time.Parse(layout, cursorStr)
-			if err == nil {
-				req.Cursor = parsed.UTC()
-				break
-			}
-		}
-
-		if err != nil {
-			log.Printf("[PAGINATION ERROR] Failed to parse cursor '%s'. Error: %v", cursorStr, err)
-		}
-	}
-
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil && o > 0 {
-			req.Offset = int32(o)
-		}
-	}
-
-	return req
-}
-
 func (app *application) votePostHandler(w http.ResponseWriter, r *http.Request) {
 	postIDParam := r.PathValue("postId")
 	postId, err := uuid.Parse(postIDParam)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid post ID format")
+		app.notFoundResponse(w, r)
 		return
 	}
 
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
 	var req VotePostRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Vote != 1 && req.Vote != -1) {
-		writeJSONError(w, http.StatusBadRequest, "Vote must be 1 or -1")
+		cleanErr := errors.New("Vote must be 1 or -1")
+		app.badRequestResponse(w, r, cleanErr)
 		return
 	}
 
 	tx, err := app.pool.Begin(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Failed to start transaction")
+		wrappedErr := fmt.Errorf("Failed to start transaction: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 	// safely abort if no explicit commit
@@ -371,7 +368,8 @@ func (app *application) votePostHandler(w http.ResponseWriter, r *http.Request) 
 				Vote:   req.Vote,
 			})
 		} else {
-			writeJSONError(w, http.StatusInternalServerError, "Database error")
+			wrappedErr := fmt.Errorf("database error: %w", err)
+			app.serverErrorResponse(w, r, wrappedErr)
 			return
 		}
 	} else {
@@ -394,7 +392,8 @@ func (app *application) votePostHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Failed to update ledger")
+		wrappedErr := fmt.Errorf("failed to update vote ledger: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
@@ -404,13 +403,15 @@ func (app *application) votePostHandler(w http.ResponseWriter, r *http.Request) 
 	})
 
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Failed to update post score")
+		wrappedErr := fmt.Errorf("failed to update post score: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
 	// commit the transaction
 	if err = tx.Commit(r.Context()); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Failed to commit transaction")
+		wrappedErr := fmt.Errorf("failed to commit transaction: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 

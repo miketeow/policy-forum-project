@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +13,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
@@ -21,81 +25,88 @@ type application struct {
 	db           *store.Queries
 	pool         *pgxpool.Pool
 	geminiAPIKey string
+	logger       *log.Logger
 }
 
 func main() {
-	// load environment variables
+
+	// 1. INITIALIZE LOGGER
+	logger := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
+
+	// 2. LOAD ENVIRONMENT
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, falling back to system environment variables")
+		logger.Println("No .env file found, falling back to system environment variables")
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET environment variable is required but not set")
+		logger.Fatal("JWT_SECRET environment variable is required but not set")
 	}
 
-	// connect to database using pgxpool for concurrency safety
+	// 3. CONNECT TO DATABASE
 	dsn := "postgres://admin:password123@localhost:5432/policy_forum?sslmode=disable"
 	pool, err := pgxpool.New(context.Background(), dsn)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
+		logger.Fatalf("Unable to connect to database: %v\n", err)
 	}
 	defer pool.Close()
 
-	log.Println("Successfully connect to the PostgreSQL database")
+	logger.Println("Successfully connect to the PostgreSQL database")
 
-	// gemini api key
+	// 4. API KEYS
 	geminiKey := os.Getenv("GEMINI_API_KEY")
 	if geminiKey == "" {
-		log.Fatal("GEMINI_API_KEY is not set in .env")
+		logger.Fatal("GEMINI_API_KEY is not set in .env")
 	}
 
-	// Initialize the application atruct with the sqlc-generated store
+	// 5. DEPENDENCY INJECTION
 	app := &application{
 		db:           store.New(pool),
 		pool:         pool,
 		jwtSecret:    []byte(jwtSecret),
 		geminiAPIKey: geminiKey,
+		logger:       logger,
 	}
 
-	// Create private router
+	// =========================================================================
+	// 6. ROUTER & MIDDLEWARE REGISTRATION
+	// =========================================================================
 	mux := http.NewServeMux()
 
-	// Register health check handler with GET prefix
+	// --- SYSTEM & GLOBAL ROUTES ---
 	mux.HandleFunc("GET /health", app.healthCheckHandler)
+	mux.HandleFunc("GET /api/search", app.searchHandler)
+
+	// --- AUTHENTICATION ---
 	mux.HandleFunc("POST /api/auth/register", app.registerHandler)
 	mux.HandleFunc("POST /api/auth/login", app.loginHandler)
-	mux.HandleFunc("POST /api/auth/logout", app.logoutHandler)
+	mux.HandleFunc("POST /api/auth/logout", app.requireAuth(app.logoutHandler))
+
+	// --- USER PROFILE & DASHBOARD
 	mux.HandleFunc("GET /api/users/me", app.requireAuth(app.getUserProfileHandler))
-	// public: anyone can see posts
-	// optional auth, if logged in, can see vote count
-	mux.HandleFunc("GET /api/posts", app.optionalAuth(app.listPostHandler))
-	// protected: must be logged in to post
-	mux.HandleFunc("POST /api/posts", app.requireAuth(app.createPostHandler))
-	// public: anyone can see posts
-	// optional auth, if logged in, can see vote count
-	mux.HandleFunc("GET /api/posts/{postId}", app.optionalAuth(app.getPostHandler))
-
-	mux.HandleFunc("POST /api/posts/{postId}/comments", app.requireAuth(app.createCommentHandler))
-	mux.HandleFunc("GET /api/posts/{postId}/comments", app.optionalAuth(app.getCommentsHandler))
-
-	mux.HandleFunc("PUT /api/posts/{postId}", app.requireAuth(app.updatePostHandler))
-	mux.HandleFunc("DELETE /api/posts/{postId}", app.requireAuth(app.deletePostHandler))
-
-	mux.HandleFunc("PUT /api/comments/{commentId}", app.requireAuth(app.updateCommentHandler))
-	mux.HandleFunc("DELETE /api/comments/{commentId}", app.requireAuth(app.deleteCommentHandler))
-
-	mux.HandleFunc("POST /api/posts/{postId}/vote", app.requireAuth(app.votePostHandler))
-
-	mux.HandleFunc("POST /api/comments/{commentId}/vote", app.requireAuth(app.voteCommentHandler))
-
-	// user dashboard routes
 	mux.HandleFunc("GET /api/users/me/posts", app.requireAuth(app.getUserPostsHandler))
 	mux.HandleFunc("GET /api/users/me/comments", app.requireAuth(app.getUserCommentsHandler))
 	mux.HandleFunc("GET /api/users/me/upvoted/posts", app.requireAuth(app.getUserUpvotedPostsHandler))
 	mux.HandleFunc("GET /api/users/me/upvoted/comments", app.requireAuth(app.getUserUpvotedCommentsHandler))
 
-	mux.HandleFunc("GET /v1/search", app.searchHandler)
+	// --- POSTS (Core Resource)
+	// Public / Optional Auth (Read operation)
+	mux.HandleFunc("GET /api/posts", app.optionalAuth(app.listPostHandler))
+	mux.HandleFunc("GET /api/posts/{postId}", app.optionalAuth(app.getPostHandler))
+	mux.HandleFunc("GET /api/posts/{postId}/comments", app.optionalAuth(app.getCommentsHandler))
+
+	// Protected (Write operation)
+	mux.HandleFunc("POST /api/posts", app.requireAuth(app.createPostHandler))
+	mux.HandleFunc("PUT /api/posts/{postId}", app.requireAuth(app.updatePostHandler))
+	mux.HandleFunc("DELETE /api/posts/{postId}", app.requireAuth(app.deletePostHandler))
+	mux.HandleFunc("POST /api/posts/{postId}/vote", app.requireAuth(app.votePostHandler))
+	mux.HandleFunc("POST /api/posts/{postId}/comments", app.requireAuth(app.createCommentHandler))
+
+	// -- COMMENTS (Independent Actions)
+	// Protected (Write operation)
+	mux.HandleFunc("PUT /api/comments/{commentId}", app.requireAuth(app.updateCommentHandler))
+	mux.HandleFunc("DELETE /api/comments/{commentId}", app.requireAuth(app.deleteCommentHandler))
+	mux.HandleFunc("POST /api/comments/{commentId}/vote", app.requireAuth(app.voteCommentHandler))
 
 	handlerWithCORS := corsMiddleware(mux)
 
@@ -110,16 +121,17 @@ func main() {
 	}
 
 	// Start the HTTP server
-	log.Printf("Starting server on %s", srv.Addr)
+	app.logger.Printf("database connection pool established")
+	app.logger.Printf("Starting server on port %s", srv.Addr)
+
 	if err := srv.ListenAndServe(); err != nil {
-		log.Fatal(err)
+		app.logger.Fatal(err)
 	}
 
 }
 
 func (app *application) healthCheckHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK - System is running\n"))
+	app.writeJSON(w, http.StatusOK, "OK - System is running\n")
 }
 
 // middleware to intercepts every incoming request, add CORS headers, and pass the request to the next handler
@@ -138,7 +150,6 @@ func corsMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// move on to next handler
 		next.ServeHTTP(w, r)
 	})
 }
@@ -153,19 +164,18 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 	var req RegisterRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		cleanedErr := errors.New("the provided JSON payload is malformed or invalid")
+		app.badRequestResponse(w, r, cleanedErr)
 		return
 	}
 
 	// hash the password
 	hashedPassword, err := auth.HashPassword(req.Password)
 	if err != nil {
-		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
+		wrappedErr := fmt.Errorf("failed to hash password for user registration: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
-	// log to prove connection worked
-	// log.Printf("SUCCESS: Receive register attempt from name, %s, email: %s, password: %s\n", req.Name, req.Email, req.Password)
-	// log.Printf("Hashed password successfully, here is the hashed password: %s\n", hashedPassword)
 
 	// prepare the database transfer object
 	now := time.Now().UTC()
@@ -181,20 +191,32 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 
 	user, err := app.db.CreateUser(r.Context(), args)
 	if err != nil {
-		log.Printf("Database error: %v", err)
-		// in production, check for unique constraint violation (e.g., email already exists)
-		http.Error(w, "Failed to create user", http.StatusInternalServerError)
+		// declare a variable to hold the postgres specific error
+		var pgErr *pgconn.PgError
+
+		// look inside the error chain, extract the details
+		if errors.As(err, &pgErr) {
+			// check if the error code is 23505 (unique constraint violation)
+			if pgErr.Code == "23505" {
+				// this is user's fault, sent a safe 409 conflict message
+				cleanErr := errors.New("a user with this email address already exists")
+				app.errorResponse(w, r, http.StatusConflict, cleanErr.Error())
+				return
+			}
+		}
+		// if it was not unique constraint violation, sent server error
+		wrappedErr := fmt.Errorf("failed to create user for user registration: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	log.Printf("SUCCESS: User %s created with ID %s", user.Name, user.ID)
+	app.logger.Printf("SUCCESS: User %s created with ID %s", user.Name, user.ID)
 
-	// send json response back to nextjs frontend
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Account created successfully",
-	})
+	err = app.writeJSON(w, http.StatusCreated, envelope{"message": "Acoount created successfully"})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+
 }
 
 type LoginRequest struct {
@@ -206,14 +228,15 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid request")
+		cleanErr := errors.New("the provided JSON payload is malformed or invalid")
+		app.badRequestResponse(w, r, cleanErr)
 		return
 	}
 
 	user, err := app.db.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
-		log.Printf("⚠️ Login failed: Email not found (%s)", req.Email)
-		writeJSONError(w, http.StatusUnauthorized, "Incorrect email or password")
+		app.logger.Printf("Login failed: Email not found (%s)", req.Email)
+		app.invalidCredentialsResponse(w, r)
 		return
 	}
 
@@ -221,45 +244,51 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	match, err := auth.ComparePasswordAndHash(req.Password, user.HashedPassword)
 
 	if err != nil || !match {
-		log.Printf("⚠️ Login failed: Password mismatch for user %s", user.Email)
-		writeJSONError(w, http.StatusUnauthorized, "Invalid email or password")
+		app.logger.Printf("Login failed: Password mismatch for user %s", user.Email)
+		app.invalidCredentialsResponse(w, r)
 		return
 	}
 
 	tokenString, err := auth.GenerateToken(app.jwtSecret, user.ID, user.KycStatus)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Failed to generate token")
+		wrappedErr := fmt.Errorf("failed to generate JWT token for user %s: %w", user.ID, err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	log.Printf("SUCCESS: User %s logged in successfully and received a token", user.Email)
+	app.logger.Printf("SUCCESS: User %s logged in successfully and received a token", user.Email)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Login successful",
-		"token":   tokenString,
-	})
+	err = app.writeJSON(w, http.StatusOK, envelope{"message": "Login successful", "token": tokenString})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) getUserProfileHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		http.Error(w, "Critical Error: User ID missing from context", http.StatusInternalServerError)
+		wrappedErr := fmt.Errorf("critical error: user id missing from contex")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
 	// fetch user profile from database
 	user, err := app.db.GetUserByID(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "User not found", http.StatusNotFound)
+		// differentiate between not found and database error
+		if errors.Is(err, pgx.ErrNoRows) {
+			app.notFoundResponse(w, r)
+			return
+		}
+		wrappedErr := fmt.Errorf("failed to fetch user profile: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(user)
+	err = app.writeJSON(w, http.StatusOK, envelope{"user": user})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) logoutHandler(w http.ResponseWriter, r *http.Request) {
@@ -274,11 +303,5 @@ func (app *application) logoutHandler(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	response := map[string]string{
-		"message": "Logout successfully",
-	}
-	json.NewEncoder(w).Encode(response)
+	app.writeJSON(w, http.StatusOK, envelope{"message": "Logout successfully"})
 }

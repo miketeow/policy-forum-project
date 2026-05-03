@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
 	"net/http"
 	"policy-forum-backend/internal/store"
 	"time"
@@ -30,30 +30,27 @@ func (app *application) createCommentHandler(w http.ResponseWriter, r *http.Requ
 	postIDParam := r.PathValue("postId")
 	postId, err := uuid.Parse(postIDParam)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid post ID format")
+		app.notFoundResponse(w, r)
 		return
 	}
 
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
 	var req CreateCommentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		cleanErr := errors.New("the provided JSON payload is malformed or invalid")
+		app.badRequestResponse(w, r, cleanErr)
 		return
 	}
 
-	// if req.ParentID != nil {
-	// 	log.Printf("[CREATE TRACER] Saving Reply! ParentID: %s | Content: %s", req.ParentID.String(), req.Content)
-	// } else {
-	// 	log.Printf("[CREATE TRACER] Saving Root Comment! ParentID is NIL | Content: %s", req.Content)
-	// }
-
 	if req.Content == "" {
-		writeJSONError(w, http.StatusBadRequest, "Comment cannot be empty")
+		cleanErr := errors.New("comment cannot be empty")
+		app.badRequestResponse(w, r, cleanErr)
 		return
 	}
 
@@ -83,18 +80,19 @@ func (app *application) createCommentHandler(w http.ResponseWriter, r *http.Requ
 
 	comment, err := app.db.CreateComments(r.Context(), args)
 	if err != nil {
-		log.Printf("Failed to create comment")
-		writeJSONError(w, http.StatusInternalServerError, "Internal Server Error")
+		wrappedErr := fmt.Errorf("failed to create comment in database: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(comment)
+	err = app.writeJSON(w, http.StatusCreated, envelope{"comment": comment})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Request) {
-	// declare master slice
+	// declare parent slice
 	var comments []store.ListCommentsByNewestRow
 	var err error
 
@@ -107,12 +105,16 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 	postIDParam := r.PathValue("postId")
 	postId, err := uuid.Parse(postIDParam)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid post ID format")
+		app.notFoundResponse(w, r)
 		return
 	}
 
 	// pagination
-	pagination := parsePagination(r)
+	pagination, err := app.parsePagination(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 	hasCursor := !pagination.Cursor.IsZero()
 
 	// look for optional parent ID
@@ -122,10 +124,10 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 		pId, err := uuid.Parse(parentIDStr)
 		if err == nil {
 			nullParentID = pgtype.UUID{Bytes: pId, Valid: true}
-			// log.Printf("[FETCH TRACER] Fetching Replies for Parent: %s", parentIDStr)
+
 		} else {
-			// log.Printf("[FETCH TRACER ERROR] Invalid UUID from frontend: '%s'", parentIDStr)
-			writeJSONError(w, http.StatusBadRequest, "Invalid parent ID format")
+			cleanErr := errors.New("parentId query parameter must be a valid UUID")
+			app.badRequestResponse(w, r, cleanErr)
 			return
 		}
 	}
@@ -177,8 +179,8 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err != nil {
-		log.Printf("Failed to fetch comments: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "Internal Server Error")
+		wrappedErr := fmt.Errorf("failed to fetch comments: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
@@ -186,27 +188,32 @@ func (app *application) getCommentsHandler(w http.ResponseWriter, r *http.Reques
 	if comments == nil {
 		comments = []store.ListCommentsByNewestRow{}
 	}
-
-	writeJSON(w, http.StatusOK, comments)
+	err = app.writeJSON(w, http.StatusOK, envelope{"comments": comments})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
+
 func (app *application) updateCommentHandler(w http.ResponseWriter, r *http.Request) {
 
 	commentIDParam := r.PathValue("commentId")
 	commentId, err := uuid.Parse(commentIDParam)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid comment ID format")
+		app.notFoundResponse(w, r)
 		return
 	}
 
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
 	var req UpdateCommentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid JSON payload")
+		cleanErr := errors.New("the provided JSON payload is malformed or invalid")
+		app.badRequestResponse(w, r, cleanErr)
 		return
 	}
 
@@ -218,12 +225,20 @@ func (app *application) updateCommentHandler(w http.ResponseWriter, r *http.Requ
 	})
 
 	if err != nil {
-		log.Printf("Failed to update comment: %v", err)
-		writeJSONError(w, http.StatusForbidden, "Not authorized to edit this comment, or comment does not exist")
+		// comment does not exist or user does not own it
+		if errors.Is(err, pgx.ErrNoRows) {
+			app.notFoundResponse(w, r)
+			return
+		}
+
+		wrappedErr := fmt.Errorf("failed to update comment in database: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
-
-	writeJSON(w, http.StatusOK, updatedComment)
+	err = app.writeJSON(w, http.StatusOK, envelope{"comment": updatedComment})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) deleteCommentHandler(w http.ResponseWriter, r *http.Request) {
@@ -231,24 +246,30 @@ func (app *application) deleteCommentHandler(w http.ResponseWriter, r *http.Requ
 	commentIDParam := r.PathValue("commentId")
 	commentId, err := uuid.Parse(commentIDParam)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid comment ID format")
+		app.notFoundResponse(w, r)
 		return
 	}
 
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	err = app.db.DeleteComment(r.Context(), store.DeleteCommentParams{
+	rowsAffected, err := app.db.DeleteComment(r.Context(), store.DeleteCommentParams{
 		ID:     commentId,
 		UserID: userID,
 	})
 
 	if err != nil {
-		log.Printf("Failed to delete comment: %v", err)
-		writeJSONError(w, http.StatusForbidden, "Not authorized to delete this comment, or comment does not exist")
+		wrappedErr := fmt.Errorf("failed to delete comment: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
+		return
+	}
+
+	if rowsAffected == 0 {
+		app.notFoundResponse(w, r)
 		return
 	}
 
@@ -259,25 +280,28 @@ func (app *application) voteCommentHandler(w http.ResponseWriter, r *http.Reques
 	commentIDParam := r.PathValue("commentId")
 	commentId, err := uuid.Parse(commentIDParam)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Invalid comment ID format")
+		app.notFoundResponse(w, r)
 		return
 	}
 
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
 	var req VoteCommentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Vote != 1 && req.Vote != -1) {
-		writeJSONError(w, http.StatusBadRequest, "Vote must be 1 or -1")
+		cleanErr := errors.New("Vote must be 1 or -1")
+		app.badRequestResponse(w, r, cleanErr)
 		return
 	}
 
 	tx, err := app.pool.Begin(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Failed to start transaction")
+		wrappedErr := fmt.Errorf("Failed to start transaction: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 	// safely abort if no explicit commit
@@ -305,7 +329,8 @@ func (app *application) voteCommentHandler(w http.ResponseWriter, r *http.Reques
 				Vote:      req.Vote,
 			})
 		} else {
-			writeJSONError(w, http.StatusInternalServerError, "Database error")
+			wrappedErr := fmt.Errorf("database error: %w", err)
+			app.serverErrorResponse(w, r, wrappedErr)
 			return
 		}
 	} else {
@@ -328,7 +353,8 @@ func (app *application) voteCommentHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Failed to update ledger")
+		wrappedErr := fmt.Errorf("failed to update vote ledger: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
@@ -338,13 +364,15 @@ func (app *application) voteCommentHandler(w http.ResponseWriter, r *http.Reques
 	})
 
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Failed to update comment score")
+		wrappedErr := fmt.Errorf("failed to update comment score: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
 	// commit the transaction
 	if err = tx.Commit(r.Context()); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Failed to commit transaction")
+		wrappedErr := fmt.Errorf("failed to commit transaction: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 

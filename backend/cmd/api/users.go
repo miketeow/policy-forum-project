@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 	"policy-forum-backend/internal/store"
 
@@ -12,11 +12,16 @@ import (
 func (app *application) getUserPostsHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	pagination := parsePagination(r)
+	pagination, err := app.parsePagination(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 	hasCursor := !pagination.Cursor.IsZero()
 
 	posts, err := app.db.ListPostsByUser(r.Context(), store.ListPostsByUserParams{
@@ -27,58 +32,72 @@ func (app *application) getUserPostsHandler(w http.ResponseWriter, r *http.Reque
 	})
 
 	if err != nil {
-		log.Printf("Failed to get user posts: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "Database error")
+		wrappedErr := fmt.Errorf("failed to fetch user's posts from database: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
 	if posts == nil {
 		posts = []store.ListPostsByUserRow{}
 	}
-
-	writeJSON(w, http.StatusOK, posts)
+	err = app.writeJSON(w, http.StatusOK, envelope{"posts": posts})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) getUserUpvotedPostsHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	pagination := parsePagination(r)
+	pagination, err := app.parsePagination(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 	hasCursor := !pagination.Cursor.IsZero()
 
-	posts, err := app.db.ListUpvotedPostsByUser(r.Context(), store.ListUpvotedPostsByUserParams{
+	upvotedPosts, err := app.db.ListUpvotedPostsByUser(r.Context(), store.ListUpvotedPostsByUserParams{
 		UserID: userID,
 		Limit:  int32(pagination.Limit),
 		Cursor: pgtype.Timestamp{Time: pagination.Cursor, Valid: hasCursor},
 	})
 
 	if err != nil {
-		log.Printf("Failed to get upvoted posts: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "Database error")
+		wrappedErr := fmt.Errorf("failed to fetch user's upvoted posts from database: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	if posts == nil {
-		posts = []store.ListUpvotedPostsByUserRow{}
+	if upvotedPosts == nil {
+		upvotedPosts = []store.ListUpvotedPostsByUserRow{}
 	}
-
-	writeJSON(w, http.StatusOK, posts)
+	err = app.writeJSON(w, http.StatusOK, envelope{"posts": upvotedPosts})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) getUserCommentsHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	pagination := parsePagination(r)
+	pagination, err := app.parsePagination(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 	hasCursor := !pagination.Cursor.IsZero()
 
-	posts, err := app.db.ListCommentsByUser(r.Context(), store.ListCommentsByUserParams{
+	comments, err := app.db.ListCommentsByUser(r.Context(), store.ListCommentsByUserParams{
 		UserID:        userID,
 		CurrentUserID: pgtype.UUID{Bytes: userID, Valid: true},
 		Limit:         int32(pagination.Limit),
@@ -86,43 +105,54 @@ func (app *application) getUserCommentsHandler(w http.ResponseWriter, r *http.Re
 	})
 
 	if err != nil {
-		log.Printf("Failed to get user comments: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "Database error")
+		wrappedErr := fmt.Errorf("failed to fetch user's comments from database: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	if posts == nil {
-		posts = []store.ListCommentsByUserRow{}
+	if comments == nil {
+		comments = []store.ListCommentsByUserRow{}
 	}
 
-	writeJSON(w, http.StatusOK, posts)
+	err = app.writeJSON(w, http.StatusOK, envelope{"comments": comments})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
 
 func (app *application) getUserUpvotedCommentsHandler(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "Unauthorized")
+		wrappedErr := fmt.Errorf("critical error: user id missing from context")
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	pagination := parsePagination(r)
+	pagination, err := app.parsePagination(r)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
 	hasCursor := !pagination.Cursor.IsZero()
 
-	posts, err := app.db.ListUpvotedCommentsByUser(r.Context(), store.ListUpvotedCommentsByUserParams{
+	upvotedComments, err := app.db.ListUpvotedCommentsByUser(r.Context(), store.ListUpvotedCommentsByUserParams{
 		UserID: userID,
 		Limit:  int32(pagination.Limit),
 		Cursor: pgtype.Timestamp{Time: pagination.Cursor, Valid: hasCursor},
 	})
 
 	if err != nil {
-		log.Printf("Failed to get upvoted comments: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "Database error")
+		wrappedErr := fmt.Errorf("failed to fetch user's upvoted comments from database: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
 
-	if posts == nil {
-		posts = []store.ListUpvotedCommentsByUserRow{}
+	if upvotedComments == nil {
+		upvotedComments = []store.ListUpvotedCommentsByUserRow{}
 	}
 
-	writeJSON(w, http.StatusOK, posts)
+	err = app.writeJSON(w, http.StatusOK, envelope{"comments": upvotedComments})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }

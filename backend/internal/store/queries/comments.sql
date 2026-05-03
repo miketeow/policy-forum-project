@@ -61,7 +61,7 @@ SET content = $3, updated_at = $4
 WHERE id = $1 AND user_id = $2
 RETURNING *;
 
--- name: DeleteComment :exec
+-- name: DeleteComment :execrows
 DELETE FROM comments
 WHERE id = $1 AND user_id = $2;
 

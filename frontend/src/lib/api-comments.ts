@@ -1,4 +1,4 @@
-import { CommentsDetail } from "@/app/forum/_components/comment-section";
+import { CommentNode } from "@/app/forum/_components/comment-thread";
 
 export async function fetchComments({
   pageParam = 0,
@@ -10,7 +10,7 @@ export async function fetchComments({
   postId: string;
   parentId: string | null;
   sort?: "desc" | "asc";
-}): Promise<CommentsDetail[]> {
+}): Promise<CommentNode[]> {
   // base url
   let url = `http://localhost:8080/api/posts/${postId}/comments?limit=5`;
 

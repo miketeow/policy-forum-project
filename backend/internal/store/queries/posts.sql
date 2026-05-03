@@ -53,7 +53,7 @@ SET title = $3, content = $4, category = $5, updated_at = $6
 WHERE id = $1 AND user_id = $2
 RETURNING *;
 
--- name: DeletePost :exec
+-- name: DeletePost :execrows
 DELETE FROM posts
 WHERE id = $1 AND user_id = $2;
 
