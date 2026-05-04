@@ -10,10 +10,12 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 export function CreatePostForm() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const formRef = useRef<HTMLFormElement>(null);
   const [isPending, setIsPending] = useState(false);
@@ -23,10 +25,13 @@ export function CreatePostForm() {
     const res = await createPostAction(formData);
 
     if (res.success) {
-      toast.success(res.message || "Discussion posted!");
+      toast.success(res.message);
       formRef.current?.reset();
 
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+      if (res.data && res.data.id) {
+        router.push(`/forum/${res.data.id}`);
+      }
     } else {
       toast.error(res.error);
     }

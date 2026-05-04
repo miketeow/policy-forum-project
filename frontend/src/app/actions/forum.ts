@@ -2,17 +2,33 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { CommentNode } from "../forum/_components/comment-thread";
+import { Post } from "../forum/_components/post-card";
+import { parseBackendError } from "@/lib/utils";
 
-export interface ActionState {
+export interface ActionState<T = undefined> {
   success: boolean;
   message: string;
-  error: string;
+  error?: string;
+  data?: T;
+}
+
+export interface PostDetail {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  created_at: string;
+  updated_at: string;
+  author_id: string;
+  author_name: string;
+  score: number;
+  user_vote: number;
 }
 
 export async function fetchPostAction(
   pageParam: number | string = 0,
   sort: string = "desc",
-) {
+): Promise<Post[]> {
   const cookieStore = await cookies();
   const token = cookieStore.get("session")?.value;
 
@@ -31,21 +47,60 @@ export async function fetchPostAction(
 
   const url = `http://localhost:8080/api/posts?limit=20&sort=${sort}${cursorQuery}`;
 
-  const res = await fetch(url, { headers, cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to fetch posts");
-  return res.json();
+  const response = await fetch(url, { headers, cache: "no-store" });
+  if (!response.ok) {
+    const errorMessage = await parseBackendError(
+      response,
+      "Failed to fetch posts",
+    );
+    throw new Error(errorMessage);
+  }
+  const data = await response.json();
+  return data.posts;
+}
+
+export async function fetchSinglePostAction(
+  postId: string,
+): Promise<PostDetail | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+
+  const headers = new Headers();
+  // attach the token
+  if (token) {
+    headers.append("Authorization", `Bearer ${token}`);
+  }
+  try {
+    const response = await fetch(`http://localhost:8080/api/posts/${postId}`, {
+      headers,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null;
+      }
+      throw new Error(`Failed to fetch post: ${response.status}`);
+    }
+    const data = await response.json();
+
+    return data.post;
+  } catch (error) {
+    console.error("fetchSinglePostAction Network Error:", error);
+    return null;
+  }
 }
 
 export async function createPostAction(
   formData: FormData,
-): Promise<ActionState> {
-  const title = formData.get("title");
-  const content = formData.get("content");
+): Promise<ActionState<Post>> {
+  const title = formData.get("title")?.toString().trim();
+  const content = formData.get("content")?.toString().trim();
 
   if (!title || !content) {
     return {
       success: false,
-      message: "Please try again",
+      message: "Validation failed",
       error: "Title and content are required",
     };
   }
@@ -56,13 +111,12 @@ export async function createPostAction(
   if (!token) {
     return {
       success: false,
-      message: "Please log in",
-      error: "Unauthorized. Please log in.",
+      message: "Authentication required",
+      error: "Your session has expired. Please log in again",
     };
   }
 
   try {
-    // server to server
     const response = await fetch("http://localhost:8080/api/posts", {
       method: "POST",
       headers: {
@@ -76,21 +130,33 @@ export async function createPostAction(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      // parse json response from Go server
+      const errorMessage = await parseBackendError(
+        response,
+        "Failed to create post",
+      );
       return {
         success: false,
-        message: "Backend error",
-        error: `${errorText}`,
+        message: "failed to create post",
+        error: errorMessage,
       };
     }
 
+    const responseData = await response.json();
     revalidatePath("/forum");
-    return { success: true, message: "Create post successfully", error: "" };
+    return {
+      success: true,
+      message: "Post created successfully",
+      data: responseData.post,
+    };
   } catch (error) {
+    // log error to server logs
+    console.error("createPostAction Network Error:", error);
     return {
       success: false,
-      message: "Failed to connect to the server",
-      error: `${error}`,
+      message: "Connection failure",
+      error:
+        "Could not reach the server. Please check your internet connection again",
     };
   }
 }
@@ -105,24 +171,23 @@ export async function updatePostAction(
   if (!token) {
     return {
       success: false,
-      message: "Please log in",
-      error: "Unauthorized. Please log in.",
+      message: "Authentication required",
+      error: "Your session has expired. Please log in again",
     };
   }
 
-  const title = formData.get("title");
-  const content = formData.get("content");
+  const title = formData.get("title")?.toString().trim();
+  const content = formData.get("content")?.toString().trim();
 
   if (!title || !content) {
     return {
       success: false,
-      message: "Please try again",
+      message: "Validation failed",
       error: "Title and content are required",
     };
   }
 
   try {
-    // server to server
     const response = await fetch(`http://localhost:8080/api/posts/${postId}`, {
       method: "PUT",
       headers: {
@@ -136,22 +201,27 @@ export async function updatePostAction(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorMessage = await parseBackendError(
+        response,
+        "Failed to update post",
+      );
       return {
         success: false,
         message: "Backend error",
-        error: `${errorText}`,
+        error: errorMessage,
       };
     }
 
     revalidatePath(`/forum/${postId}`);
     revalidatePath(`/forum`);
-    return { success: true, message: "Post updated successfully", error: "" };
+    return { success: true, message: "Post updated successfully" };
   } catch (error) {
+    console.error("updatePostAction Network Error:", error);
     return {
       success: false,
-      message: "Failed to connect to the server",
-      error: `${error}`,
+      message: "Connection failure",
+      error:
+        "Could not reach the server. Please check your internet connection again",
     };
   }
 }
@@ -163,35 +233,40 @@ export async function deletePostAction(postId: string): Promise<ActionState> {
   if (!token) {
     return {
       success: false,
-      message: "Please log in",
-      error: "Unauthorized. Please log in.",
+      message: "Authentication required",
+      error: "Your session has expired. Please log in again",
     };
   }
 
   try {
-    const res = await fetch(`http://localhost:8080/api/posts/${postId}`, {
+    const response = await fetch(`http://localhost:8080/api/posts/${postId}`, {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${token}`,
       },
     });
 
-    if (!res.ok) {
-      const errorText = await res.text();
+    if (!response.ok) {
+      const errorMessage = await parseBackendError(
+        response,
+        "Failed to delete post",
+      );
       return {
         success: false,
         message: "Backend error",
-        error: `${errorText}`,
+        error: errorMessage,
       };
     }
 
     revalidatePath(`/forum`);
-    return { success: true, message: "Post deleted successfully", error: "" };
+    return { success: true, message: "Post deleted successfully" };
   } catch (error) {
+    console.error("deletePostAction Network Error:", error);
     return {
       success: false,
-      message: "Failed to connect to the server",
-      error: `${error}`,
+      message: "Connection failure",
+      error:
+        "Could not reach the server. Please check your internet connection again",
     };
   }
 }
@@ -204,25 +279,27 @@ export async function createCommentAction(
   if (!token) {
     return {
       success: false,
-      message: "Please log in",
-      error: "Unauthorized",
+      message: "Authentication required",
+      error: "Your session has expired. Please log in again",
     };
   }
 
-  const postId = formData.get("postId") as string;
-  const content = formData.get("content") as string;
-  const parentId = formData.get("parentId") as string | null;
+  const postId = formData.get("postId")?.toString().trim();
+  const content = formData.get("content")?.toString().trim();
 
-  if (!content || content.trim() === "") {
+  const rawParentId = formData.get("parentId")?.toString().trim();
+  const parentId = rawParentId ? rawParentId : null;
+
+  if (!postId || !content) {
     return {
       success: false,
-      message: "Comment cannot be empty",
-      error: "Content cannot be empty",
+      message: "Validation failed",
+      error: "Post ID and comment content are required.",
     };
   }
 
   try {
-    const res = await fetch(
+    const response = await fetch(
       `http://localhost:8080/api/posts/${postId}/comments`,
       {
         method: "POST",
@@ -237,32 +314,28 @@ export async function createCommentAction(
       },
     );
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      let parsedError = "Failed to create comment";
-      try {
-        const errData = JSON.parse(errorText);
-        parsedError = errData.error || errData.message || errorText;
-      } catch (e) {
-        parsedError = errorText;
-      }
-
+    if (!response.ok) {
+      const errorMessage = await parseBackendError(
+        response,
+        "Failed to create comment",
+      );
       return {
         success: false,
         message: "Failed to create comment",
-        error: parsedError,
+        error: errorMessage,
       };
     }
 
     revalidatePath(`/forum/${postId}`);
 
-    return { success: true, message: "Post comment successfully", error: "" };
+    return { success: true, message: "Post comment successfully" };
   } catch (error) {
-    console.error("Action error: ", error);
+    console.error("createCommentAction Network Error:", error);
     return {
       success: false,
-      message: "Failed to connect to the server",
-      error: `${error}`,
+      message: "Connection failure",
+      error:
+        "Could not reach the server. Please check your internet connection again",
     };
   }
 }
@@ -277,26 +350,53 @@ export async function updateCommentAction(
   if (!token) {
     return {
       success: false,
-      message: "Unauthorized",
-      error: "Unauthorized",
+      message: "Authentication required",
+      error: "Your session has expired. Please log in again",
+    };
+  }
+
+  if (!content || content.trim() === "") {
+    return {
+      success: false,
+      message: "Validation failed",
+      error: "Comment content cannot be empty",
     };
   }
 
   try {
-    const res = await fetch(`http://localhost:8080/api/comments/${commentId}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+    const response = await fetch(
+      `http://localhost:8080/api/comments/${commentId}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content: content.trim() }),
       },
-      body: JSON.stringify({ content }),
-    });
+    );
 
-    if (!res.ok) throw new Error("Failed to update comment");
+    if (!response.ok) {
+      const errorMessage = await parseBackendError(
+        response,
+        "Failed to update comment",
+      );
+      return {
+        success: false,
+        message: "Failed to update comment",
+        error: errorMessage,
+      };
+    }
     revalidatePath(`/forum/${postId}`);
-    return { success: true, message: "Comment updated", error: "" };
+    return { success: true, message: "Comment updated" };
   } catch (error) {
-    return { success: false, message: "Error", error: `${error}` };
+    console.error("updateCommentAction Network Error:", error);
+    return {
+      success: false,
+      message: "Connection failure",
+      error:
+        "Could not reach the server. Please check your internet connection again",
+    };
   }
 }
 
@@ -309,21 +409,40 @@ export async function deleteCommentAction(
   if (!token) {
     return {
       success: false,
-      message: "Unauthorized",
-      error: "Unauthorized",
+      message: "Authentication required",
+      error: "Your session has expired. Please log in again",
     };
   }
 
   try {
-    const res = await fetch(`http://localhost:8080/api/comments/${commentId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error("Failed to delete comment");
+    const response = await fetch(
+      `http://localhost:8080/api/comments/${commentId}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (!response.ok) {
+      const errorMessage = await parseBackendError(
+        response,
+        "Failed to delete comment",
+      );
+      return {
+        success: false,
+        message: "Failed to delete comment",
+        error: errorMessage,
+      };
+    }
     revalidatePath(`/forum/${postId}`);
-    return { success: true, message: "Comment deleted", error: "" };
+    return { success: true, message: "Comment deleted successfully" };
   } catch (error) {
-    return { success: false, message: "Error", error: `${error}` };
+    console.error("deleteCommentAction Network Error:", error);
+    return {
+      success: false,
+      message: "Connection failure",
+      error:
+        "Could not reach the server. Please check your internet connection again",
+    };
   }
 }
 
@@ -336,36 +455,44 @@ export async function votePostAction(
   if (!token) {
     return {
       success: false,
-      message: "Unauthorized",
-      error: "Unauthorized",
+      message: "Authentication required",
+      error: "Your session has expired. Please log in again",
     };
   }
 
   try {
-    const res = await fetch(`http://localhost:8080/api/posts/${postId}/vote`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+    const response = await fetch(
+      `http://localhost:8080/api/posts/${postId}/vote`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ vote }),
       },
-      body: JSON.stringify({ vote }),
-    });
+    );
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      let parsedError = "Backend error";
-      try {
-        const errData = JSON.parse(errorText);
-        parsedError = errData.error || errorText;
-      } catch (e) {
-        parsedError = errorText;
-      }
-      return { success: false, message: parsedError, error: parsedError };
+    if (!response.ok) {
+      const errorMessage = await parseBackendError(
+        response,
+        "Failed to vote post",
+      );
+      return {
+        success: false,
+        message: "Failed to vote post",
+        error: errorMessage,
+      };
     }
-
-    return { success: true, message: "Vote recorded", error: "" };
+    return { success: true, message: "Post voted successfully" };
   } catch (error) {
-    return { success: false, message: "Error", error: `${error}` };
+    console.error("votePostAction Network Error:", error);
+    return {
+      success: false,
+      message: "Connection failure",
+      error:
+        "Could not reach the server. Please check your internet connection again",
+    };
   }
 }
 
@@ -378,13 +505,13 @@ export async function voteCommentAction(
   if (!token) {
     return {
       success: false,
-      message: "Unauthorized",
-      error: "Unauthorized",
+      message: "Authentication required",
+      error: "Your session has expired. Please log in again",
     };
   }
 
   try {
-    const res = await fetch(
+    const response = await fetch(
       `http://localhost:8080/api/comments/${commentId}/vote`,
       {
         method: "POST",
@@ -396,21 +523,27 @@ export async function voteCommentAction(
       },
     );
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      let parsedError = "Backend error";
-      try {
-        const errData = JSON.parse(errorText);
-        parsedError = errData.error || errorText;
-      } catch (e) {
-        parsedError = errorText;
-      }
-      return { success: false, message: parsedError, error: parsedError };
+    if (!response.ok) {
+      const errorMessage = await parseBackendError(
+        response,
+        "Failed to vote comment",
+      );
+      return {
+        success: false,
+        message: "Failed to vote comment",
+        error: errorMessage,
+      };
     }
 
-    return { success: true, message: "Vote recorded", error: "" };
+    return { success: true, message: "Comment voted successfully" };
   } catch (error) {
-    return { success: false, message: "Error", error: `${error}` };
+    console.error("voteCommentAction Network Error:", error);
+    return {
+      success: false,
+      message: "Connection failure",
+      error:
+        "Could not reach the server. Please check your internet connection again",
+    };
   }
 }
 
@@ -445,9 +578,15 @@ export async function fetchCommentsAction(
   if (sort) url += `&sort=${sort}`;
 
   const res = await fetch(url, { headers, cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to fetch comments");
-
-  return res.json();
+  if (!res.ok) {
+    const errorMessage = await parseBackendError(
+      res,
+      "Failed to fetch comments",
+    );
+    throw new Error(errorMessage);
+  }
+  const data = await res.json();
+  return data.comments;
 }
 
 export async function checkPostCategoryAction(
@@ -466,12 +605,14 @@ export async function checkPostCategoryAction(
       headers,
       cache: "no-store",
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return null;
+    }
 
-    const post = await res.json();
-    return post.category;
+    const data = await res.json();
+    return data.post.category;
   } catch (error) {
-    console.error("Failed to check category", error);
+    console.error("voteCommentAction checkPostCategoryAction Error:", error);
     return null;
   }
 }

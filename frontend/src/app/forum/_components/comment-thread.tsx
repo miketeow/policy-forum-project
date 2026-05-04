@@ -190,7 +190,11 @@ export function CommentThread({
               >
                 Cancel
               </Button>
-              <Button size="sm" onClick={handleEditSubmit} disabled={isPending}>
+              <Button
+                size="sm"
+                onClick={handleEditSubmit}
+                disabled={isPending || editContent.trim() === ""}
+              >
                 {isPending ? "Saving..." : "Save"}
               </Button>
             </div>

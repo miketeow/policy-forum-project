@@ -22,7 +22,7 @@ export async function Header() {
           {user ? (
             <Profile user={user} />
           ) : (
-            <Button asChild className="w-full rounded-sm">
+            <Button asChild className="rounded-sm">
               <Link href="/sign-in">Sign In</Link>
             </Button>
           )}

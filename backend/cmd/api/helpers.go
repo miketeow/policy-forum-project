@@ -40,7 +40,7 @@ func (app *application) parsePagination(r *http.Request) (PaginationRequest, err
 		if l < 1 || l > 100 {
 			return req, errors.New("limit query parameter must be within 1 and 100")
 		}
-		req.Limit = 1
+		req.Limit = l
 	}
 
 	// cursor parsing
@@ -79,6 +79,7 @@ func (app *application) parsePagination(r *http.Request) (PaginationRequest, err
 		if o < 0 {
 			return req, errors.New("offset query paramater cannot be negative")
 		}
+		req.Offset = int32(o)
 	}
 
 	return req, nil

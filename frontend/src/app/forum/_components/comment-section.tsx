@@ -90,7 +90,7 @@ export function CommentSection({
         </DropdownMenu>
       </div>
 
-      {data.pages[0].length === 0 ? (
+      {data.pages[0]?.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No comments yet. Start the conversation!
         </p>

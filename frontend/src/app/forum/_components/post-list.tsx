@@ -41,11 +41,11 @@ export function PostList({ initialPosts, initialSort }: PostListProps) {
     queryKey: ["posts", sortOrder],
     queryFn: ({ pageParam }) => fetchPostAction(pageParam, sortOrder),
 
-    initialPageParam: 0,
+    initialPageParam: 0 as number | string,
     placeholderData: keepPreviousData,
     initialData: {
       pages: [initialPosts], // first page
-      pageParams: [0], // cursor for first page is 0
+      pageParams: [0 as number | string], // cursor for first page is 0
     },
     refetchInterval: (query) => {
       const currentPages = query.state.data?.pages as Post[][] | undefined;

@@ -1,6 +1,8 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { Post } from "../forum/_components/post-card";
+import { CommentNode } from "../forum/_components/comment-thread";
 
 // helper function to handle secure fetch
 async function secureFetch(endpoint: string, pageParam: number | string = 0) {
@@ -26,19 +28,27 @@ async function secureFetch(endpoint: string, pageParam: number | string = 0) {
   return res.json();
 }
 
-export async function fetchUserPostsAction(pageParam: number | string = 0) {
-  return secureFetch("posts", pageParam);
+export async function fetchUserPostsAction(
+  pageParam: number | string = 0,
+): Promise<Post[]> {
+  const data = await secureFetch("posts", pageParam);
+  return data.posts;
 }
-export async function fetchUserCommentsAction(pageParam: number | string = 0) {
-  return secureFetch("comments", pageParam);
+export async function fetchUserCommentsAction(
+  pageParam: number | string = 0,
+): Promise<CommentNode[]> {
+  const data = await secureFetch("comments", pageParam);
+  return data.comments;
 }
 export async function fetchUserUpvotedPostsAction(
   pageParam: number | string = 0,
-) {
-  return secureFetch("upvoted/posts", pageParam);
+): Promise<Post[]> {
+  const data = await secureFetch("upvoted/posts", pageParam);
+  return data.posts;
 }
 export async function fetchUserUpvotedCommentsAction(
   pageParam: number | string = 0,
-) {
-  return secureFetch("upvoted/comments", pageParam);
+): Promise<CommentNode[]> {
+  const data = await secureFetch("upvoted/comments", pageParam);
+  return data.comments;
 }

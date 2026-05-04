@@ -23,15 +23,15 @@ export function useSearch(query: string) {
 
       // pass signal to fetch so React Queries can abort stale requests
       const res = await fetch(
-        `http://localhost:8080/v1/search?q=${encodeURIComponent(debouncedQuery)}`,
+        `http://localhost:8080/api/search?q=${encodeURIComponent(debouncedQuery)}`,
         { signal },
       );
 
       if (!res.ok) {
         throw new Error("Search Failed");
       }
-
-      return (await res.json()) as SearchResult[];
+      const data = await res.json();
+      return data.result as SearchResult[];
     },
     enabled: debouncedQuery.length > 0,
   });

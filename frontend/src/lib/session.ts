@@ -24,8 +24,8 @@ export const getSession = cache(async () => {
       console.error(`[Auth] Backend error checking session: ${res.status}`);
       return null;
     }
-    const user = await res.json();
-    return user;
+    const data = await res.json();
+    return data.user;
   } catch (error) {
     console.error("[Auth] Fatal error connecting to Go backend", error);
     return null;

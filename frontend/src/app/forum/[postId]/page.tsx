@@ -7,54 +7,12 @@ import { BreadcrumbNav } from "../_components/breadcumb-nav";
 import { CommentSection } from "../_components/comment-section";
 import { PostAction } from "../_components/post-actions";
 import { VoteButton } from "../_components/vote-button";
-import { cookies } from "next/headers";
 import { PendingPostPoller } from "../_components/pending-post-poller";
+import { fetchSinglePostAction } from "@/app/actions/forum";
 
 interface PostDetailPageProps {
   params: Promise<{ postId: string }>;
   searchParams: Promise<{ sort?: "desc" | "asc" }>;
-}
-
-interface PostDetail {
-  id: string;
-  title: string;
-  content: string;
-  category: string;
-  created_at: string;
-  updated_at: string;
-  author_id: string;
-  author_name: string;
-  score: number;
-  user_vote: number;
-}
-
-async function getPostByID(postId: string): Promise<PostDetail | null> {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session")?.value;
-
-    const headers = new Headers();
-    // attach the token
-    if (token) {
-      headers.append("Authorization", `Bearer ${token}`);
-    }
-    const res = await fetch(`http://localhost:8080/api/posts/${postId}`, {
-      headers,
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      if (res.status === 404) {
-        return null;
-      }
-      throw new Error("Failed to fetch post");
-    }
-
-    return res.json();
-  } catch (error) {
-    console.error(error);
-    return null;
-  }
 }
 
 export default async function PostDetailPage({
@@ -67,7 +25,7 @@ export default async function PostDetailPage({
   const { sort: sortQuery } = await searchParams;
 
   const sort = sortQuery === "asc" ? "asc" : "desc";
-  const post = await getPostByID(postId);
+  const post = await fetchSinglePostAction(postId);
 
   if (!post) {
     return (

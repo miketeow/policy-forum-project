@@ -33,3 +33,17 @@ export function getCategoryColor(category: string) {
       return "bg-slate-600 hover:bg-slate-700";
   }
 }
+
+export async function parseBackendError(
+  response: Response,
+  defaultMessage: string,
+): Promise<string> {
+  const errorText = await response.text();
+
+  try {
+    const errData = JSON.parse(errorText);
+    return errData.error || defaultMessage;
+  } catch {
+    return errorText || defaultMessage;
+  }
+}

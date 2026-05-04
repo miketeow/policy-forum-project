@@ -1,9 +1,10 @@
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { CreatePostForm } from "./_components/create-post-form";
-import { Post } from "./_components/post-card";
 import { PostList } from "./_components/post-list";
 import { cookies } from "next/headers";
+import { fetchPostAction } from "../actions/forum";
+import { Post } from "./_components/post-card";
 
 interface UserProfile {
   id: string;
@@ -14,35 +15,6 @@ interface UserProfile {
   updated_at: string;
 }
 
-async function getPosts(sort: string): Promise<Post[]> {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session")?.value;
-
-    const headers = new Headers();
-    // attach the token
-    if (token) {
-      headers.append("Authorization", `Bearer ${token}`);
-    }
-    // hit the go backend directly, set "no-store" to avoid aggresive cache
-    const res = await fetch(
-      `http://localhost:8080/api/posts?limit=20&sort=${sort}`,
-
-      { headers, cache: "no-store" },
-    );
-
-    if (!res.ok) {
-      const errorText = await res.text(); // Read the Go error message
-      console.error(`Backend failed with status ${res.status}:`, errorText);
-      return [];
-    }
-
-    return res.json();
-  } catch (error) {
-    console.error("Network error fetching posts: ", error);
-    return [];
-  }
-}
 export default async function Forum({
   searchParams,
 }: {
@@ -65,7 +37,14 @@ export default async function Forum({
   let sort: "desc" | "asc" | "popular" = "desc";
   if (resolvedParams.sort === "asc") sort = "asc";
   if (resolvedParams.sort === "popular") sort = "popular";
-  const posts = await getPosts(sort);
+
+  let posts: Post[] = [];
+  try {
+    posts = await fetchPostAction(0, sort);
+  } catch (error) {
+    console.error("Failed to fetch initial posts:", error);
+    posts = [];
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 flex flex-col gap-8">
