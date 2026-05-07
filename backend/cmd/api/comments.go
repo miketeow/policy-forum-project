@@ -14,16 +14,16 @@ import (
 )
 
 type CreateCommentRequest struct {
-	Content  string     `json:"content"`
-	ParentID *uuid.UUID `json:"parent_id,omitempty"`
+	Content  string     `json:"content" validate:"required,min=1,max=10000"`
+	ParentID *uuid.UUID `json:"parent_id,omitempty" validate:"omitempty,uuid"`
 }
 
 type UpdateCommentRequest struct {
-	Content string `json:"content"`
+	Content string `json:"content" validate:"required,min=1,max=10000"`
 }
 
 type VoteCommentRequest struct {
-	Vote int16 `json:"vote"`
+	Vote int16 `json:"vote" validate:"required,oneof=1 -1"`
 }
 
 func (app *application) createCommentHandler(w http.ResponseWriter, r *http.Request) {
@@ -48,9 +48,8 @@ func (app *application) createCommentHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if req.Content == "" {
-		cleanErr := errors.New("comment cannot be empty")
-		app.badRequestResponse(w, r, cleanErr)
+	if err := Validate.Struct(req); err != nil {
+		app.failedValidationResponse(w, r, err)
 		return
 	}
 
@@ -217,6 +216,11 @@ func (app *application) updateCommentHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	if err := Validate.Struct(req); err != nil {
+		app.failedValidationResponse(w, r, err)
+		return
+	}
+
 	updatedComment, err := app.db.UpdateComment(r.Context(), store.UpdateCommentParams{
 		ID:        commentId,
 		UserID:    userID,
@@ -295,6 +299,11 @@ func (app *application) voteCommentHandler(w http.ResponseWriter, r *http.Reques
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Vote != 1 && req.Vote != -1) {
 		cleanErr := errors.New("Vote must be 1 or -1")
 		app.badRequestResponse(w, r, cleanErr)
+		return
+	}
+
+	if err := Validate.Struct(req); err != nil {
+		app.failedValidationResponse(w, r, err)
 		return
 	}
 

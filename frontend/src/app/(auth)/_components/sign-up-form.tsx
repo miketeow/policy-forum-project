@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { getApiUrl } from "@/lib/api";
-import { SignUpSchema } from "@/schemas/sign-up";
+import { SignUpSchema } from "@/schemas/auth";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { redirect } from "next/navigation";

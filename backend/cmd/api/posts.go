@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"policy-forum-backend/internal/store"
 	"time"
@@ -15,19 +16,19 @@ import (
 )
 
 type CreatePostRequest struct {
-	Title    string `json:"title"`
-	Content  string `json:"content"`
-	Category string `json:"category"`
+	Title    string `json:"title" validate:"required,min=5,max=300"`
+	Content  string `json:"content" validate:"required,min=10,max=40000"`
+	Category string `json:"category" validate:"omitempty,oneof=INFRASTRUCTURE ECONOMY HEALTHCARE EDUCATION ENVIRONMENT SAFETY OTHER"`
 }
 
 type UpdatePostRequest struct {
-	Title    string `json:"title"`
-	Content  string `json:"content"`
-	Category string `json:"category"`
+	Title    string `json:"title" validate:"required,min=5,max=300"`
+	Content  string `json:"content" validate:"required,min=10,max=40000"`
+	Category string `json:"category" validate:"omitempty,oneof=INFRASTRUCTURE ECONOMY HEALTHCARE EDUCATION ENVIRONMENT SAFETY OTHER"`
 }
 
 type VotePostRequest struct {
-	Vote int16 `json:"vote"`
+	Vote int16 `json:"vote" validate:"required,oneof=1 -1"`
 }
 
 func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +43,11 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		cleanErr := errors.New("the provided JSON payload is malformed or invalid")
 		app.badRequestResponse(w, r, cleanErr)
+		return
+	}
+
+	if err := Validate.Struct(req); err != nil {
+		app.failedValidationResponse(w, r, err)
 		return
 	}
 
@@ -70,11 +76,13 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	bgCtx := context.WithoutCancel(r.Context())
+
 	// new go routine in background, to create correct category for the post
-	go func(postID uuid.UUID, postTitle, postContent string) {
+	go func(bgCtx context.Context, postID uuid.UUID, postTitle, postContent string) {
 		// call gemini
-		aiCategory := app.categorizeWithAI(postTitle, postContent)
-		app.logger.Printf("AI Categorized Post %s as: %s", postID.String(), aiCategory)
+		aiCategory := app.categorizeWithAI(bgCtx, postTitle, postContent)
+		app.LogInfo(bgCtx, "ai categorized post", slog.String("post_id", postID.String()), slog.String("category", aiCategory))
 
 		// update the database
 		// use context.Background() because the original HTTP request context
@@ -84,9 +92,12 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 			Category: store.PostCategory(aiCategory),
 		})
 		if err != nil {
-			app.logger.Printf("BACKGROUND TASK FAILED: failed to update post %s with AI category: %v", postID, err)
+			app.LogError(bgCtx, "failed to update post with category",
+				slog.String("post_id", postID.String()),
+				slog.String("error", err.Error()))
+
 		}
-	}(post.ID, post.Title, post.Content) // pass variables here
+	}(bgCtx, post.ID, post.Title, post.Content) // pass variables here
 
 	err = app.writeJSON(w, http.StatusCreated, envelope{"post": post})
 	if err != nil {
@@ -232,6 +243,11 @@ func (app *application) updatePostHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if err := Validate.Struct(req); err != nil {
+		app.failedValidationResponse(w, r, err)
+		return
+	}
+
 	category := req.Category
 
 	if category == "" {
@@ -260,19 +276,26 @@ func (app *application) updatePostHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// detach context
+	bgCtx := context.WithoutCancel(r.Context())
+
 	// background task: re-categorized modified content
-	go func(postID uuid.UUID, postTitle, postContent string) {
-		aiCategory := app.categorizeWithAI(postTitle, postContent)
-		app.logger.Printf("AI Re-Categorized Post %s as: %s", postID.String(), aiCategory)
+	go func(bgCtx context.Context, postID uuid.UUID, postTitle, postContent string) {
+		aiCategory := app.categorizeWithAI(bgCtx, postTitle, postContent)
+		app.LogInfo(bgCtx, "ai re-categorized post",
+			slog.String("post_id", postID.String()),
+			slog.String("category", aiCategory))
 
 		err := app.db.UpdatePostCategory(context.Background(), store.UpdatePostCategoryParams{
 			ID:       postID,
 			Category: store.PostCategory(aiCategory),
 		})
 		if err != nil {
-			app.logger.Printf("BACKGROUND TASK FAILED: failed to update post %s with AI category: %v", postID, err)
+			app.LogError(bgCtx, "failed to update post with category",
+				slog.String("post_id", postID.String()),
+				slog.String("error", err.Error()))
 		}
-	}(updatedPost.ID, updatedPost.Title, updatedPost.Content)
+	}(bgCtx, updatedPost.ID, updatedPost.Title, updatedPost.Content)
 
 	err = app.writeJSON(w, http.StatusOK, envelope{"post": updatedPost})
 	if err != nil {
@@ -334,6 +357,11 @@ func (app *application) votePostHandler(w http.ResponseWriter, r *http.Request) 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Vote != 1 && req.Vote != -1) {
 		cleanErr := errors.New("Vote must be 1 or -1")
 		app.badRequestResponse(w, r, cleanErr)
+		return
+	}
+
+	if err := Validate.Struct(req); err != nil {
+		app.failedValidationResponse(w, r, err)
 		return
 	}
 

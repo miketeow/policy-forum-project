@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"policy-forum-backend/internal/store"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -152,6 +154,33 @@ func (app *application) getUserUpvotedCommentsHandler(w http.ResponseWriter, r *
 	}
 
 	err = app.writeJSON(w, http.StatusOK, envelope{"comments": upvotedComments})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
+
+func (app *application) getUserProfileHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(userIDKey).(uuid.UUID)
+	if !ok {
+		wrappedErr := fmt.Errorf("critical error: user id missing from contex")
+		app.serverErrorResponse(w, r, wrappedErr)
+		return
+	}
+
+	// fetch user profile from database
+	user, err := app.db.GetUserByID(r.Context(), userID)
+	if err != nil {
+		// differentiate between not found and database error
+		if errors.Is(err, pgx.ErrNoRows) {
+			app.notFoundResponse(w, r)
+			return
+		}
+		wrappedErr := fmt.Errorf("failed to fetch user profile: %w", err)
+		app.serverErrorResponse(w, r, wrappedErr)
+		return
+	}
+
+	err = app.writeJSON(w, http.StatusOK, envelope{"user": user})
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}

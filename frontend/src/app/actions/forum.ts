@@ -4,10 +4,16 @@ import { cookies } from "next/headers";
 import { CommentNode } from "../forum/_components/comment-thread";
 import { Post } from "../forum/_components/post-card";
 import { parseBackendError } from "@/lib/utils";
+import {
+  CommentSchema,
+  PostSchema,
+  UpdateCommentArgsSchema,
+  VoteSchema,
+} from "@/schemas/forum";
 
 export interface ActionState<T = undefined> {
   success: boolean;
-  message: string;
+  message?: string;
   error?: string;
   data?: T;
 }
@@ -94,17 +100,6 @@ export async function fetchSinglePostAction(
 export async function createPostAction(
   formData: FormData,
 ): Promise<ActionState<Post>> {
-  const title = formData.get("title")?.toString().trim();
-  const content = formData.get("content")?.toString().trim();
-
-  if (!title || !content) {
-    return {
-      success: false,
-      message: "Validation failed",
-      error: "Title and content are required",
-    };
-  }
-
   const cookieStore = await cookies();
   const token = cookieStore.get("session")?.value;
 
@@ -116,6 +111,22 @@ export async function createPostAction(
     };
   }
 
+  const rawData = {
+    title: formData.get("title")?.toString().trim(),
+    content: formData.get("content")?.toString().trim(),
+  };
+
+  const validatedFields = PostSchema.safeParse(rawData);
+
+  if (!validatedFields.success) {
+    return {
+      success: false,
+      error: validatedFields.error.issues[0].message,
+    };
+  }
+
+  const { title, content } = validatedFields.data;
+
   try {
     const response = await fetch("http://localhost:8080/api/posts", {
       method: "POST",
@@ -123,10 +134,7 @@ export async function createPostAction(
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        title,
-        content,
-      }),
+      body: JSON.stringify({ title, content }),
     });
 
     if (!response.ok) {
@@ -176,16 +184,21 @@ export async function updatePostAction(
     };
   }
 
-  const title = formData.get("title")?.toString().trim();
-  const content = formData.get("content")?.toString().trim();
+  const rawData = {
+    title: formData.get("title")?.toString().trim(),
+    content: formData.get("content")?.toString().trim(),
+  };
 
-  if (!title || !content) {
+  const validatedFields = PostSchema.safeParse(rawData);
+
+  if (!validatedFields.success) {
     return {
       success: false,
-      message: "Validation failed",
-      error: "Title and content are required",
+      error: validatedFields.error.issues[0].message,
     };
   }
+
+  const { title, content } = validatedFields.data;
 
   try {
     const response = await fetch(`http://localhost:8080/api/posts/${postId}`, {
@@ -194,10 +207,7 @@ export async function updatePostAction(
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        title,
-        content,
-      }),
+      body: JSON.stringify({ title, content }),
     });
 
     if (!response.ok) {
@@ -284,19 +294,22 @@ export async function createCommentAction(
     };
   }
 
-  const postId = formData.get("postId")?.toString().trim();
-  const content = formData.get("content")?.toString().trim();
+  const rawData = {
+    postId: formData.get("postId")?.toString().trim(),
+    content: formData.get("content")?.toString().trim(),
+    parentId: formData.get("parentId")?.toString().trim() || undefined,
+  };
 
-  const rawParentId = formData.get("parentId")?.toString().trim();
-  const parentId = rawParentId ? rawParentId : null;
+  const validatedFields = CommentSchema.safeParse(rawData);
 
-  if (!postId || !content) {
+  if (!validatedFields.success) {
     return {
       success: false,
-      message: "Validation failed",
-      error: "Post ID and comment content are required.",
+      error: validatedFields.error.issues[0].message,
     };
   }
+
+  const { postId, content, parentId } = validatedFields.data;
 
   try {
     const response = await fetch(
@@ -309,7 +322,7 @@ export async function createCommentAction(
         },
         body: JSON.stringify({
           content,
-          ...(parentId ? { parent_id: parentId } : {}),
+          parentId: parentId,
         }),
       },
     );
@@ -355,24 +368,31 @@ export async function updateCommentAction(
     };
   }
 
-  if (!content || content.trim() === "") {
+  const validatedFields = UpdateCommentArgsSchema.safeParse({
+    commentId: commentId,
+    postId: postId,
+    content: content.trim(),
+  });
+
+  if (!validatedFields.success) {
     return {
       success: false,
-      message: "Validation failed",
-      error: "Comment content cannot be empty",
+      error: validatedFields.error.issues[0].message,
     };
   }
 
+  const safeData = validatedFields.data;
+
   try {
     const response = await fetch(
-      `http://localhost:8080/api/comments/${commentId}`,
+      `http://localhost:8080/api/comments/${safeData.commentId}`,
       {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ content: content.trim() }),
+        body: JSON.stringify({ content: safeData.content }),
       },
     );
 
@@ -387,7 +407,7 @@ export async function updateCommentAction(
         error: errorMessage,
       };
     }
-    revalidatePath(`/forum/${postId}`);
+    revalidatePath(`/forum/${safeData.postId}`);
     return { success: true, message: "Comment updated" };
   } catch (error) {
     console.error("updateCommentAction Network Error:", error);
@@ -460,6 +480,17 @@ export async function votePostAction(
     };
   }
 
+  const validatedFields = VoteSchema.safeParse({ vote: vote });
+
+  if (!validatedFields.success) {
+    return {
+      success: false,
+      error: validatedFields.error.issues[0].message,
+    };
+  }
+
+  const safeData = validatedFields.data;
+
   try {
     const response = await fetch(
       `http://localhost:8080/api/posts/${postId}/vote`,
@@ -469,7 +500,7 @@ export async function votePostAction(
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ vote }),
+        body: JSON.stringify(safeData.vote),
       },
     );
 
@@ -510,6 +541,17 @@ export async function voteCommentAction(
     };
   }
 
+  const validatedFields = VoteSchema.safeParse({ vote: vote });
+
+  if (!validatedFields.success) {
+    return {
+      success: false,
+      error: validatedFields.error.issues[0].message,
+    };
+  }
+
+  const safeData = validatedFields.data;
+
   try {
     const response = await fetch(
       `http://localhost:8080/api/comments/${commentId}/vote`,
@@ -519,7 +561,7 @@ export async function voteCommentAction(
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ vote }),
+        body: JSON.stringify(safeData.vote),
       },
     );
 

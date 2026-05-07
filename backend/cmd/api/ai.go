@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -41,7 +43,7 @@ var validCategories = map[string]bool{
 	"OTHER":          true,
 }
 
-func (app *application) categorizeWithAI(title, content string) string {
+func (app *application) categorizeWithAI(ctx context.Context, title, content string) string {
 	prompt := fmt.Sprintf(`You are a highly accurate automated categorization engine for a public policy forum.
 			Read the user's post title and content below.
 
@@ -70,7 +72,7 @@ func (app *application) categorizeWithAI(title, content string) string {
 	}
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		app.logger.Printf("Failed to marshal Gemini request: %v", err)
+		app.LogError(ctx, "Failed to marshal Gemini request", slog.String("error", err.Error()))
 		return "OTHER"
 	}
 
@@ -82,12 +84,20 @@ func (app *application) categorizeWithAI(title, content string) string {
 
 	maxRetries := 3
 	for i := 1; i <= maxRetries; i++ {
-		resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			app.LogError(ctx, "failed to create HTTP request", slog.String("error", err.Error()))
+			return "OTHER"
+		}
+		req.Header.Set("Content-Type", "application/json")
 
-		// 2. FIX RETRY LOGIC: If network timeout, sleep and retry! Do NOT return!
+		resp, err := client.Do(req)
 		if err != nil {
 			waitTime := time.Duration(i*2) * time.Second
-			app.logger.Printf("Network error on attempt %d: %v. Retrying in %v...", i, err, waitTime)
+			app.LogWarn(ctx, "network error communicating with gemini",
+				slog.Int("attempt", i),
+				slog.String("error", err.Error()),
+				slog.String("retry_in", waitTime.String()))
 			time.Sleep(waitTime)
 			continue
 		}
@@ -96,7 +106,10 @@ func (app *application) categorizeWithAI(title, content string) string {
 		if resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == http.StatusTooManyRequests {
 			resp.Body.Close()
 			waitTime := time.Duration(i*2) * time.Second
-			app.logger.Printf("Gemini is busy (Status %d). Retrying in %v...", resp.StatusCode, waitTime)
+			app.LogWarn(ctx, "gemini api rate limited or busy",
+				slog.Int("status_code", resp.StatusCode),
+				slog.Int("attempt", i),
+				slog.String("retry_in", waitTime.String()))
 			time.Sleep(waitTime)
 			continue
 		}
@@ -105,7 +118,9 @@ func (app *application) categorizeWithAI(title, content string) string {
 		if resp.StatusCode != http.StatusOK {
 			var errBody map[string]interface{}
 			json.NewDecoder(resp.Body).Decode(&errBody)
-			app.logger.Printf("Gemini API HTTP Error %d: %v", resp.StatusCode, errBody)
+			app.LogError(ctx, "gemini api returned hard http error",
+				slog.Int("status_code", resp.StatusCode),
+				slog.Any("api_error_body", errBody))
 			resp.Body.Close()
 			return "OTHER"
 		}
@@ -113,7 +128,7 @@ func (app *application) categorizeWithAI(title, content string) string {
 		// SUCCESS! Decode the response
 		var apiResp geminiResponse
 		if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-			app.logger.Printf("Gemini API JSON Decode Error: %v", err)
+			app.LogError(ctx, "failed to decode gemini JSON response", slog.String("error", err.Error()))
 			resp.Body.Close()
 			return "OTHER"
 		}
@@ -122,7 +137,7 @@ func (app *application) categorizeWithAI(title, content string) string {
 		// extract the text and clean it
 		if len(apiResp.Candidates) > 0 && len(apiResp.Candidates[0].Content.Parts) > 0 {
 			rawText := apiResp.Candidates[0].Content.Parts[0].Text
-			app.logger.Printf("Raw AI Response: %q", rawText)
+			app.LogInfo(ctx, "received successful AI categorization", slog.String("raw_response", rawText))
 			cleanCategory := strings.TrimSpace(strings.ToUpper(rawText))
 			cleanCategory = strings.TrimRight(cleanCategory, ".")
 
@@ -131,14 +146,14 @@ func (app *application) categorizeWithAI(title, content string) string {
 				return cleanCategory
 			}
 
-			app.logger.Printf("AI returned invalid category format: %q", cleanCategory)
+			app.LogWarn(ctx, "AI returned invalid category format", slog.String("returned_category", cleanCategory))
 			return "OTHER"
 		}
 
 		break // If we get here, the response was successfully parsed but empty
 	}
 
-	app.logger.Printf("Gemini API failed after %d retries", maxRetries)
+	app.LogError(ctx, "Gemini API categorization failed completely", slog.Int("max_retries", maxRetries))
 	return "OTHER"
 
 }

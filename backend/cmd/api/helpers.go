@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -64,7 +66,7 @@ func (app *application) parsePagination(r *http.Request) (PaginationRequest, err
 		}
 		// if failed all layout, it is a bad request
 		if err != nil {
-			app.logger.Printf("pagination error: failed to parse cursor %s", cursorStr)
+			app.logger.Error("pagination error: failed to parse cursor", slog.String("error", err.Error()))
 			// return clean error for frontend
 			return req, errors.New("cursor query parameter is not a valid timestamp")
 		}
@@ -83,4 +85,28 @@ func (app *application) parsePagination(r *http.Request) (PaginationRequest, err
 	}
 
 	return req, nil
+}
+
+func (app *application) LogInfo(ctx context.Context, msg string, args ...any) {
+	traceID, ok := ctx.Value(traceIDKey).(string)
+	if ok {
+		args = append(args, slog.String("trace_id", traceID))
+	}
+	app.logger.InfoContext(ctx, msg, args...)
+}
+
+func (app *application) LogError(ctx context.Context, msg string, args ...any) {
+	traceID, ok := ctx.Value(traceIDKey).(string)
+	if ok {
+		args = append(args, slog.String("trace_id", traceID))
+	}
+	app.logger.ErrorContext(ctx, msg, args...)
+}
+
+func (app *application) LogWarn(ctx context.Context, msg string, args ...any) {
+	traceID, ok := ctx.Value(traceIDKey).(string)
+	if ok {
+		args = append(args, slog.String("trace_id", traceID))
+	}
+	app.logger.WarnContext(ctx, msg, args...)
 }

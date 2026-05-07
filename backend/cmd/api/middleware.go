@@ -13,7 +13,10 @@ import (
 // create custom type for context key to prevent name collision in memory
 type contextKey string
 
-const userIDKey = contextKey("userID")
+const (
+	userIDKey  contextKey = "userID"
+	traceIDKey contextKey = "traceID"
+)
 
 func (app *application) extractUserIDFromAuthHeader(r *http.Request) (uuid.UUID, error) {
 	authHeader := r.Header.Get("Authorization")
@@ -65,4 +68,36 @@ func (app *application) optionalAuth(next http.HandlerFunc) http.HandlerFunc {
 		// allow user to pass through with actual handler
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
+}
+
+func (app *application) TraceMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		traceID := r.Header.Get("X-Request-Id")
+
+		if traceID == "" {
+			traceID = uuid.New().String()
+		}
+
+		ctx := context.WithValue(r.Context(), traceIDKey, traceID)
+
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// tell browser to allow requests from this origin
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+		// tell browser to allow these HTTP methods
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		// tell browser to allow these headers
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
