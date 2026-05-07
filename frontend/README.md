@@ -19,8 +19,8 @@ This project follows an evolutionary architecture approach, starting from a foun
 - [ ] **Concurrency & Data Integrity:** Resolve "Double Vote" race conditions by implementing atomic increment queries (`SET votes = votes + 1`), database-level `UNIQUE` constraints, and Go-level transaction rollbacks.
 
 ### Phase 4: Payload Integrity & Standardization
-- [ ] **Implement Request Validation:** Replace manual backend nil-checks with declarative struct tags using `go-playground/validator`, returning standardized error JSON for Next.js form handling.
-- [ ] **Migrate to Structured Logging:** Strip out standard `log.Printf` and implement `log/slog` for JSON-formatted, key-value logging to enable machine-readable log aggregation.
+- [x] **Implement Request Validation:** Replace manual backend nil-checks with declarative struct tags using `go-playground/validator`, returning standardized error JSON for Next.js form handling.
+- [x] **Migrate to Structured Logging:** Strip out standard `log.Printf` and implement `log/slog` for JSON-formatted, key-value logging to enable machine-readable log aggregation.
 
 ### Phase 5: High-Performance Read Paths
 - [ ] **Implement Cache-Aside Pattern (Redis):** Integrate `go-redis` to cache the "Trending/Popular Posts" hot path. 
@@ -38,4 +38,4 @@ This project follows an evolutionary architecture approach, starting from a foun
 
 ### Phase 7: Distributed Observability
 - [ ] **Instrument OpenTelemetry (OTel):** Inject trace IDs at the Next.js edge and propagate context through the Go HTTP router, Redis cache, and PostgreSQL queries.
-- [ ] **Latency Visualization:** Output distributed traces to a local Jaeger container to generate waterfall charts for bottleneck identification.
+- [x] **Latency Visualization:** Output distributed traces to a local Jaeger container to generate waterfall charts for bottleneck identification.

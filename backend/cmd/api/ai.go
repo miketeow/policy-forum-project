@@ -9,6 +9,10 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type geminiRequest struct {
@@ -44,6 +48,15 @@ var validCategories = map[string]bool{
 }
 
 func (app *application) categorizeWithAI(ctx context.Context, title, content string) string {
+	tracer := otel.Tracer("ai-service")
+	ctx, span := tracer.Start(ctx, "Gemini_Categorization")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("post.title", title),
+		attribute.Int("post.content_length", len(content)),
+	)
+
 	prompt := fmt.Sprintf(`You are a highly accurate automated categorization engine for a public policy forum.
 			Read the user's post title and content below.
 
@@ -73,6 +86,8 @@ func (app *application) categorizeWithAI(ctx context.Context, title, content str
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
 		app.LogError(ctx, "Failed to marshal Gemini request", slog.String("error", err.Error()))
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to marshal JSON")
 		return "OTHER"
 	}
 
@@ -122,6 +137,8 @@ func (app *application) categorizeWithAI(ctx context.Context, title, content str
 				slog.Int("status_code", resp.StatusCode),
 				slog.Any("api_error_body", errBody))
 			resp.Body.Close()
+
+			span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d from Gemini", resp.StatusCode))
 			return "OTHER"
 		}
 
@@ -143,10 +160,20 @@ func (app *application) categorizeWithAI(ctx context.Context, title, content str
 
 			// FIX: The Whitelist Firewall
 			if validCategories[cleanCategory] {
+				span.SetAttributes(
+					attribute.String("ai.resolved_category", cleanCategory),
+					attribute.Int("ai.retry_count", i),
+				)
+				span.SetStatus(codes.Ok, "Categorization successful")
 				return cleanCategory
 			}
 
 			app.LogWarn(ctx, "AI returned invalid category format", slog.String("returned_category", cleanCategory))
+			span.SetAttributes(
+				attribute.String("ai.resolved_category", "OTHER"),
+				attribute.String("ai.invalid_raw_response", cleanCategory),
+				attribute.Int("ai.retry_count", i),
+			)
 			return "OTHER"
 		}
 
@@ -154,6 +181,12 @@ func (app *application) categorizeWithAI(ctx context.Context, title, content str
 	}
 
 	app.LogError(ctx, "Gemini API categorization failed completely", slog.Int("max_retries", maxRetries))
+	// 4. FINAL FAILURE STATE
+	span.SetStatus(codes.Error, "Max retries exhausted")
+	span.SetAttributes(
+		attribute.String("ai.resolved_category", "OTHER"), // Defaulted
+		attribute.Int("ai.retry_count", maxRetries),
+	)
 	return "OTHER"
 
 }

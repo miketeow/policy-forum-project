@@ -70,19 +70,19 @@ func (app *application) optionalAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (app *application) TraceMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		traceID := r.Header.Get("X-Request-Id")
+// func (app *application) TraceMiddleware(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		traceID := r.Header.Get("X-Request-Id")
 
-		if traceID == "" {
-			traceID = uuid.New().String()
-		}
+// 		if traceID == "" {
+// 			traceID = uuid.New().String()
+// 		}
 
-		ctx := context.WithValue(r.Context(), traceIDKey, traceID)
+// 		ctx := context.WithValue(r.Context(), traceIDKey, traceID)
 
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
+// 		next.ServeHTTP(w, r.WithContext(ctx))
+// 	})
+// }
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,10 @@
 package main
 
-import "net/http"
+import (
+	"net/http"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+)
 
 func (app *application) routes() http.Handler {
 	mux := http.NewServeMux()
@@ -40,7 +44,6 @@ func (app *application) routes() http.Handler {
 	mux.HandleFunc("POST /api/comments/{commentId}/vote", app.requireAuth(app.voteCommentHandler))
 
 	handler := corsMiddleware(mux)
-	handler = app.TraceMiddleware(handler)
 
-	return handler
+	return otelhttp.NewHandler(handler, "policy-forum-api")
 }

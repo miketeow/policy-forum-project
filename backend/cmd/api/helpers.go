@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 type envelope map[string]any
@@ -88,25 +90,25 @@ func (app *application) parsePagination(r *http.Request) (PaginationRequest, err
 }
 
 func (app *application) LogInfo(ctx context.Context, msg string, args ...any) {
-	traceID, ok := ctx.Value(traceIDKey).(string)
-	if ok {
-		args = append(args, slog.String("trace_id", traceID))
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.HasTraceID() {
+		args = append(args, slog.String("trace_id", spanCtx.TraceID().String()))
 	}
 	app.logger.InfoContext(ctx, msg, args...)
 }
 
 func (app *application) LogError(ctx context.Context, msg string, args ...any) {
-	traceID, ok := ctx.Value(traceIDKey).(string)
-	if ok {
-		args = append(args, slog.String("trace_id", traceID))
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.HasTraceID() {
+		args = append(args, slog.String("trace_id", spanCtx.TraceID().String()))
 	}
 	app.logger.ErrorContext(ctx, msg, args...)
 }
 
 func (app *application) LogWarn(ctx context.Context, msg string, args ...any) {
-	traceID, ok := ctx.Value(traceIDKey).(string)
-	if ok {
-		args = append(args, slog.String("trace_id", traceID))
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.HasTraceID() {
+		args = append(args, slog.String("trace_id", spanCtx.TraceID().String()))
 	}
 	app.logger.WarnContext(ctx, msg, args...)
 }

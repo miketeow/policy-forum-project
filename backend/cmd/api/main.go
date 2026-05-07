@@ -40,6 +40,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Start OpenTelemetry
+	tp := initTracer()
+	defer func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			logger.Error("Error shutting down tracer provider", slog.String("error", err.Error()))
+		}
+	}()
+
 	// 3. CONNECT TO DATABASE
 	dsn := "postgres://admin:password123@localhost:5432/policy_forum?sslmode=disable"
 	pool, err := pgxpool.New(context.Background(), dsn)
