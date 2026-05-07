@@ -1,6 +1,6 @@
 "use client";
 
-import { createSession } from "@/app/actions/auth";
+import { signInAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -11,7 +11,6 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { getApiUrl } from "@/lib/api";
 import { SignInSchema } from "@/schemas/auth";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
@@ -31,40 +30,25 @@ export default function SignInForm() {
   });
 
   async function onSubmit(values: z.infer<typeof SignInSchema>) {
-    try {
-      const res = await fetch(getApiUrl("/api/auth/login"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(values),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        await createSession(data.token);
-        toast.success(data.message || "Successfully signed in");
-        // navigate without polluting the back history
-        router.push("/dashboard");
-        return;
-      }
-
-      const contentType = res.headers.get("content-type");
-      let errorMessage = "Authentication failed";
-      if (contentType && contentType.includes("application/json")) {
-        const errorData = await res.json();
-        errorMessage = errorData.error || errorMessage;
-      } else {
-        console.error(`[Auth] Non-JSON error response: ${res.status}`);
-        errorMessage = `Server error (${res.status}). Please try again later.`;
-      }
-      toast.error(errorMessage);
-    } catch (error) {
-      console.error("[Auth] Network or CORS error:", error);
-      toast.error(
-        "Unable to connect to the server. Please check your internet connection.",
-      );
+    const res = await signInAction(values);
+    if (res.success) {
+      toast.success(res.message);
+      router.push("/dashboard");
+      return;
     }
+
+    if (res.fields) {
+      Object.keys(res.fields).forEach((fieldName) => {
+        form.setError(fieldName as keyof z.infer<typeof SignInSchema>, {
+          type: "server",
+          message: res.fields![fieldName],
+        });
+      });
+      toast.error("Please corrected the highlighted fields.");
+      return;
+    }
+    // generic error
+    toast.error(res.error);
   }
 
   return (

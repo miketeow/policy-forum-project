@@ -1,5 +1,6 @@
 "use client";
 
+import { signUpAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -10,16 +11,18 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { getApiUrl } from "@/lib/api";
+
 import { SignUpSchema } from "@/schemas/auth";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { useRouter } from "next/navigation";
+
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import z from "zod";
 
 export default function SignUpForm() {
+  const router = useRouter();
   const form = useForm<z.infer<typeof SignUpSchema>>({
     resolver: zodResolver(SignUpSchema),
     defaultValues: {
@@ -30,21 +33,25 @@ export default function SignUpForm() {
   });
 
   async function onSubmit(values: z.infer<typeof SignUpSchema>) {
-    const res = await fetch(getApiUrl("/api/auth/register"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(values),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      toast.success(data.message);
-      redirect("/sign-in");
-    } else {
-      toast.error("Something went wrong");
+    const res = await signUpAction(values);
+    if (res.success) {
+      toast.success(res.message);
+      router.push("/sign-ip");
+      return;
     }
+
+    if (res.fields) {
+      Object.keys(res.fields).forEach((fieldName) => {
+        form.setError(fieldName as keyof z.infer<typeof SignUpSchema>, {
+          type: "server",
+          message: res.fields![fieldName],
+        });
+      });
+      toast.error("Please corrected the highlighted fields.");
+      return;
+    }
+    // generic error
+    toast.error(res.error);
   }
 
   return (
