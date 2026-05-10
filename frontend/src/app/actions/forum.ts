@@ -500,7 +500,7 @@ export async function votePostAction(
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(safeData.vote),
+        body: JSON.stringify({ vote: safeData.vote }),
       },
     );
 

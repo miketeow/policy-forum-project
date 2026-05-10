@@ -57,21 +57,27 @@ RETURNING *;
 DELETE FROM posts
 WHERE id = $1 AND user_id = $2;
 
--- name: GetPostVote :one
-SELECT vote from post_votes WHERE post_id = $1 AND user_id = $2;
+-- name: GetPostVoteForUpdate :one
+SELECT vote from post_votes WHERE post_id = $1 AND user_id = $2
+FOR UPDATE;
 
--- name: SetPostVote :exec
--- This is "Upsert". If the row exists, it overwrites the vote. If not, it inserts it
+-- name: InsertPostVote :exec
+-- STRICT INSERT. If two threads try to insert at the same time, will get unique violation error
 INSERT INTO post_votes (post_id, user_id, vote)
-VALUES ($1, $2, $3)
-ON CONFLICT (post_id, user_id) DO UPDATE
-SET vote = EXCLUDED.vote;
+VALUES ($1, $2, $3);
+
+-- name: UpdatePostVote :exec
+UPDATE post_votes SET vote = $3
+WHERE post_id = $1 AND user_id = $2;
 
 -- name: RemovePostVote :exec
 DELETE FROM post_votes WHERE post_id = $1 AND user_id = $2;
 
--- name: UpdatePostScore :exec
-UPDATE posts SET score = score + $2 WHERE id = $1;
+-- name: AtomicUpdatePostScore :exec
+-- Let the database engine to do the math to guarantee absolute precision
+UPDATE posts
+SET score = score + $2
+WHERE id = $1;
 
 -- name: ListPostsByUser :many
 SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, posts.score,

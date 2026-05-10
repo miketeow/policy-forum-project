@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -87,7 +88,7 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 		// update the database
 		// use context.Background() because the original HTTP request context
 		// will be cancelled the moment the user gets their HTTP response
-		err := app.db.UpdatePostCategory(context.Background(), store.UpdatePostCategoryParams{
+		err := app.db.UpdatePostCategory(bgCtx, store.UpdatePostCategoryParams{
 			ID:       postID,
 			Category: store.PostCategory(aiCategory),
 		})
@@ -286,7 +287,7 @@ func (app *application) updatePostHandler(w http.ResponseWriter, r *http.Request
 			slog.String("post_id", postID.String()),
 			slog.String("category", aiCategory))
 
-		err := app.db.UpdatePostCategory(context.Background(), store.UpdatePostCategoryParams{
+		err := app.db.UpdatePostCategory(bgCtx, store.UpdatePostCategoryParams{
 			ID:       postID,
 			Category: store.PostCategory(aiCategory),
 		})
@@ -372,13 +373,13 @@ func (app *application) votePostHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	// safely abort if no explicit commit
-	defer tx.Rollback(r.Context())
+	defer tx.Rollback(context.Background())
 
 	// attach transaction to sqlc queries
 	qtx := app.db.WithTx(tx)
 
 	// check user's current vote in the ledger
-	currentVote, err := qtx.GetPostVote(r.Context(), store.GetPostVoteParams{
+	currentVote, err := qtx.GetPostVoteForUpdate(r.Context(), store.GetPostVoteForUpdateParams{
 		PostID: postId,
 		UserID: userID,
 	})
@@ -390,17 +391,28 @@ func (app *application) votePostHandler(w http.ResponseWriter, r *http.Request) 
 		if errors.Is(err, pgx.ErrNoRows) {
 			// user never vote on this post
 			delta = int32(req.Vote)
-			err = qtx.SetPostVote(r.Context(), store.SetPostVoteParams{
+			err = qtx.InsertPostVote(r.Context(), store.InsertPostVoteParams{
 				PostID: postId,
 				UserID: userID,
 				Vote:   req.Vote,
 			})
+			// handle concurrency
+			if err != nil {
+				var pgErr *pgconn.PgError
+				if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+					app.errorResponse(w, r, http.StatusConflict, "Vote already processing")
+					return
+				}
+				app.serverErrorResponse(w, r, fmt.Errorf("failed to insert vote: %w", err))
+				return
+			}
 		} else {
 			wrappedErr := fmt.Errorf("database error: %w", err)
 			app.serverErrorResponse(w, r, wrappedErr)
 			return
 		}
 	} else {
+		// user already vote
 		if currentVote == req.Vote {
 			// user click the same button, toggling vote off
 			delta = -int32(req.Vote)
@@ -411,7 +423,7 @@ func (app *application) votePostHandler(w http.ResponseWriter, r *http.Request) 
 		} else {
 			// user flipped the vote, e.g. upvote to downvote
 			delta = int32(req.Vote * 2)
-			err = qtx.SetPostVote(r.Context(), store.SetPostVoteParams{
+			err = qtx.UpdatePostVote(r.Context(), store.UpdatePostVoteParams{
 				PostID: postId,
 				UserID: userID,
 				Vote:   req.Vote,
@@ -425,7 +437,7 @@ func (app *application) votePostHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = qtx.UpdatePostScore(r.Context(), store.UpdatePostScoreParams{
+	err = qtx.AtomicUpdatePostScore(r.Context(), store.AtomicUpdatePostScoreParams{
 		ID:    postId,
 		Score: delta,
 	})

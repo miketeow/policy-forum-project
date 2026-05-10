@@ -13,6 +13,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const atomicUpdatePostScore = `-- name: AtomicUpdatePostScore :exec
+UPDATE posts
+SET score = score + $2
+WHERE id = $1
+`
+
+type AtomicUpdatePostScoreParams struct {
+	ID    uuid.UUID `json:"id"`
+	Score int32     `json:"score"`
+}
+
+// Let the database engine to do the math to guarantee absolute precision
+func (q *Queries) AtomicUpdatePostScore(ctx context.Context, arg AtomicUpdatePostScoreParams) error {
+	_, err := q.db.Exec(ctx, atomicUpdatePostScore, arg.ID, arg.Score)
+	return err
+}
+
 const createPost = `-- name: CreatePost :one
 INSERT INTO posts (id, user_id, title, content, category, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -117,20 +134,38 @@ func (q *Queries) GetPostByID(ctx context.Context, arg GetPostByIDParams) (GetPo
 	return i, err
 }
 
-const getPostVote = `-- name: GetPostVote :one
+const getPostVoteForUpdate = `-- name: GetPostVoteForUpdate :one
 SELECT vote from post_votes WHERE post_id = $1 AND user_id = $2
+FOR UPDATE
 `
 
-type GetPostVoteParams struct {
+type GetPostVoteForUpdateParams struct {
 	PostID uuid.UUID `json:"post_id"`
 	UserID uuid.UUID `json:"user_id"`
 }
 
-func (q *Queries) GetPostVote(ctx context.Context, arg GetPostVoteParams) (int16, error) {
-	row := q.db.QueryRow(ctx, getPostVote, arg.PostID, arg.UserID)
+func (q *Queries) GetPostVoteForUpdate(ctx context.Context, arg GetPostVoteForUpdateParams) (int16, error) {
+	row := q.db.QueryRow(ctx, getPostVoteForUpdate, arg.PostID, arg.UserID)
 	var vote int16
 	err := row.Scan(&vote)
 	return vote, err
+}
+
+const insertPostVote = `-- name: InsertPostVote :exec
+INSERT INTO post_votes (post_id, user_id, vote)
+VALUES ($1, $2, $3)
+`
+
+type InsertPostVoteParams struct {
+	PostID uuid.UUID `json:"post_id"`
+	UserID uuid.UUID `json:"user_id"`
+	Vote   int16     `json:"vote"`
+}
+
+// STRICT INSERT. If two threads try to insert at the same time, will get unique violation error
+func (q *Queries) InsertPostVote(ctx context.Context, arg InsertPostVoteParams) error {
+	_, err := q.db.Exec(ctx, insertPostVote, arg.PostID, arg.UserID, arg.Vote)
+	return err
 }
 
 const listPostsByNewest = `-- name: ListPostsByNewest :many
@@ -479,25 +514,6 @@ func (q *Queries) RemovePostVote(ctx context.Context, arg RemovePostVoteParams) 
 	return err
 }
 
-const setPostVote = `-- name: SetPostVote :exec
-INSERT INTO post_votes (post_id, user_id, vote)
-VALUES ($1, $2, $3)
-ON CONFLICT (post_id, user_id) DO UPDATE
-SET vote = EXCLUDED.vote
-`
-
-type SetPostVoteParams struct {
-	PostID uuid.UUID `json:"post_id"`
-	UserID uuid.UUID `json:"user_id"`
-	Vote   int16     `json:"vote"`
-}
-
-// This is "Upsert". If the row exists, it overwrites the vote. If not, it inserts it
-func (q *Queries) SetPostVote(ctx context.Context, arg SetPostVoteParams) error {
-	_, err := q.db.Exec(ctx, setPostVote, arg.PostID, arg.UserID, arg.Vote)
-	return err
-}
-
 const updatePost = `-- name: UpdatePost :one
 UPDATE posts
 SET title = $3, content = $4, category = $5, updated_at = $6
@@ -554,16 +570,18 @@ func (q *Queries) UpdatePostCategory(ctx context.Context, arg UpdatePostCategory
 	return err
 }
 
-const updatePostScore = `-- name: UpdatePostScore :exec
-UPDATE posts SET score = score + $2 WHERE id = $1
+const updatePostVote = `-- name: UpdatePostVote :exec
+UPDATE post_votes SET vote = $3
+WHERE post_id = $1 AND user_id = $2
 `
 
-type UpdatePostScoreParams struct {
-	ID    uuid.UUID `json:"id"`
-	Score int32     `json:"score"`
+type UpdatePostVoteParams struct {
+	PostID uuid.UUID `json:"post_id"`
+	UserID uuid.UUID `json:"user_id"`
+	Vote   int16     `json:"vote"`
 }
 
-func (q *Queries) UpdatePostScore(ctx context.Context, arg UpdatePostScoreParams) error {
-	_, err := q.db.Exec(ctx, updatePostScore, arg.ID, arg.Score)
+func (q *Queries) UpdatePostVote(ctx context.Context, arg UpdatePostVoteParams) error {
+	_, err := q.db.Exec(ctx, updatePostVote, arg.PostID, arg.UserID, arg.Vote)
 	return err
 }

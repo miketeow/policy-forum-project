@@ -16,7 +16,7 @@ This project follows an evolutionary architecture approach, starting from a foun
 ### Phase 3: Discoverability & Engagement
 - [x] **Discovery (Search & Filtering):** Implement robust search capabilities (transitioning from standard SQL `ILIKE` to Postgres Full-Text Search) to ensure forum discoverability.
 - [x] **Engagement Base:** Introduce relational tables for user upvotes and downvotes.
-- [ ] **Concurrency & Data Integrity:** Resolve "Double Vote" race conditions by implementing atomic increment queries (`SET votes = votes + 1`), database-level `UNIQUE` constraints, and Go-level transaction rollbacks.
+- [x] **Concurrency & Data Integrity:** Resolve "Double Vote" race conditions by implementing atomic increment queries (`SET votes = votes + 1`), database-level `UNIQUE` constraints, and Go-level transaction rollbacks.
 
 ### Phase 4: Payload Integrity & Standardization
 - [x] **Implement Request Validation:** Replace manual backend nil-checks with declarative struct tags using `go-playground/validator`, returning standardized error JSON for Next.js form handling.

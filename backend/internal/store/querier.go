@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	// Let the database engine to do the math to guarantee absolute precision
+	AtomicUpdatePostScore(ctx context.Context, arg AtomicUpdatePostScoreParams) error
 	CreateComments(ctx context.Context, arg CreateCommentsParams) (Comment, error)
 	CreatePost(ctx context.Context, arg CreatePostParams) (Post, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
@@ -18,10 +20,12 @@ type Querier interface {
 	DeletePost(ctx context.Context, arg DeletePostParams) (int64, error)
 	GetCommentVote(ctx context.Context, arg GetCommentVoteParams) (int16, error)
 	GetPostByID(ctx context.Context, arg GetPostByIDParams) (GetPostByIDRow, error)
-	GetPostVote(ctx context.Context, arg GetPostVoteParams) (int16, error)
+	GetPostVoteForUpdate(ctx context.Context, arg GetPostVoteForUpdateParams) (int16, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	GlobalSearch(ctx context.Context, searchQuery string) ([]GlobalSearchRow, error)
+	// STRICT INSERT. If two threads try to insert at the same time, will get unique violation error
+	InsertPostVote(ctx context.Context, arg InsertPostVoteParams) error
 	ListCommentsByNewest(ctx context.Context, arg ListCommentsByNewestParams) ([]ListCommentsByNewestRow, error)
 	ListCommentsByOldest(ctx context.Context, arg ListCommentsByOldestParams) ([]ListCommentsByOldestRow, error)
 	ListCommentsByPopular(ctx context.Context, arg ListCommentsByPopularParams) ([]ListCommentsByPopularRow, error)
@@ -35,13 +39,11 @@ type Querier interface {
 	RemoveCommentVote(ctx context.Context, arg RemoveCommentVoteParams) error
 	RemovePostVote(ctx context.Context, arg RemovePostVoteParams) error
 	SetCommentVote(ctx context.Context, arg SetCommentVoteParams) error
-	// This is "Upsert". If the row exists, it overwrites the vote. If not, it inserts it
-	SetPostVote(ctx context.Context, arg SetPostVoteParams) error
 	UpdateComment(ctx context.Context, arg UpdateCommentParams) (Comment, error)
 	UpdateCommentScore(ctx context.Context, arg UpdateCommentScoreParams) error
 	UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, error)
 	UpdatePostCategory(ctx context.Context, arg UpdatePostCategoryParams) error
-	UpdatePostScore(ctx context.Context, arg UpdatePostScoreParams) error
+	UpdatePostVote(ctx context.Context, arg UpdatePostVoteParams) error
 }
 
 var _ Querier = (*Queries)(nil)
