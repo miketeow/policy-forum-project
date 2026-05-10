@@ -51,6 +51,7 @@ export function PostAction({
     if (res.success) {
       toast.success(res.message);
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["users", "posts"] });
       setIsEditModalOpen(false);
     } else {
       toast.error(res.error);
@@ -67,6 +68,7 @@ export function PostAction({
     if (res.success) {
       toast.success(res.message);
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["users", "posts"] });
       router.push("/forum");
     } else {
       toast.error(res.error);

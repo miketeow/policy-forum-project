@@ -29,6 +29,7 @@ export function CreatePostForm() {
       formRef.current?.reset();
 
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["users", "posts"] });
       if (res.data && res.data.id) {
         router.push(`/forum/${res.data.id}`);
       }
