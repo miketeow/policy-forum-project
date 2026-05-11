@@ -23,9 +23,9 @@ This project follows an evolutionary architecture approach, starting from a foun
 - [x] **Migrate to Structured Logging:** Strip out standard `log.Printf` and implement `log/slog` for JSON-formatted, key-value logging to enable machine-readable log aggregation.
 
 ### Phase 5: High-Performance Read Paths
-- [ ] **Implement Cache-Aside Pattern (Redis):** Integrate `go-redis` to cache the "Trending/Popular Posts" hot path. 
-- [ ] **Dynamic Cache Invalidation:** Implement targeted cache deletion (explicit `DEL`) triggered by new high-value votes to prevent stale data delivery.
-- [ ] **Infrastructure Optimization:** Configure Dockerized Redis for local development with a deployment strategy targeting Upstash Serverless Redis to minimize cloud overhead.
+- [x] **Implement Cache-Aside Pattern (Redis):** Integrate `go-redis` to cache the "Trending/Popular Posts" hot path. 
+- [x] **Dynamic Cache Invalidation:** Implement targeted cache deletion (explicit `DEL`) triggered by new high-value votes to prevent stale data delivery.
+- [x] **Infrastructure Optimization:** Configure Dockerized Redis for local development with a deployment strategy targeting Upstash Serverless Redis to minimize cloud overhead.
 
 ### Phase 6: AI Integration & Asynchronous Workflows
 - [x] **Synchronous AI Integration:** Implement initial LLM categorization for forum posts using structured prompt engineering.
@@ -37,5 +37,5 @@ This project follows an evolutionary architecture approach, starting from a foun
   - *Production:* Fallback to a `NoOpGenerator` paired with a meticulously styled `@media print` CSS solution on the frontend to optimize cloud costs while retaining professional output.
 
 ### Phase 7: Distributed Observability
-- [ ] **Instrument OpenTelemetry (OTel):** Inject trace IDs at the Next.js edge and propagate context through the Go HTTP router, Redis cache, and PostgreSQL queries.
+- [x] **Instrument OpenTelemetry (OTel):** Inject trace IDs at the Next.js edge and propagate context through the Go HTTP router, Redis cache, and PostgreSQL queries.
 - [x] **Latency Visualization:** Output distributed traces to a local Jaeger container to generate waterfall charts for bottleneck identification.

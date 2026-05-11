@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 )
 
 // dependency injection container
@@ -19,6 +20,7 @@ type application struct {
 	pool         *pgxpool.Pool
 	geminiAPIKey string
 	logger       *slog.Logger
+	rdb          *redis.Client
 }
 
 func main() {
@@ -66,6 +68,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		// fallback for local dev if env is missing
+		redisURL = "redis://localhost:6379"
+	}
+	// parseurl automatically handle TLS, password, and ports based on whether the url start with redis or rediss (two s means TLS needed)
+	opt, err := redis.ParseURL(redisURL)
+	if err != nil {
+		logger.Error("Failed to parse Redis URL", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	rdb := redis.NewClient(opt)
+
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		logger.Error("Failed to connect to Redis", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	logger.Info("Redis connection pool established")
+
 	// 5. DEPENDENCY INJECTION
 	app := &application{
 		db:           store.New(pool),
@@ -73,6 +96,7 @@ func main() {
 		jwtSecret:    []byte(jwtSecret),
 		geminiAPIKey: geminiKey,
 		logger:       logger,
+		rdb:          rdb,
 	}
 
 	// Configure the HTTP server with strict timeout

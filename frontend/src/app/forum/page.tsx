@@ -5,6 +5,8 @@ import { PostList } from "./_components/post-list";
 import { cookies } from "next/headers";
 import { fetchPostAction } from "../actions/forum";
 import { Post } from "./_components/post-card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 interface UserProfile {
   id: string;
@@ -20,17 +22,13 @@ export default async function Forum({
 }: {
   searchParams: Promise<{ sort?: string }>;
 }) {
-  const user: UserProfile = await getSession();
+  const user: UserProfile | null = await getSession();
 
   const cookieStore = await cookies();
   const hasCookie = cookieStore.has("session");
 
   if (!user && hasCookie) {
     redirect("/api/auth/logout");
-  }
-
-  if (!user) {
-    redirect("/sign-in");
   }
 
   const resolvedParams = await searchParams;
@@ -59,9 +57,25 @@ export default async function Forum({
         </p>
       </div>
 
-      {/*create post*/}
-      <CreatePostForm />
-
+      {user ? (
+        <CreatePostForm />
+      ) : (
+        <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg bg-muted/20 text-center">
+          <h3 className="font-semibold text-lg mb-2">Join the Discussion</h3>
+          <p className="text-muted-foreground text-sm mb-6 max-w-sm">
+            You must be logged in to create a post, participate in comments, or
+            vote in community policies
+          </p>
+          <div className="flex gap-4">
+            <Button asChild>
+              <Link href="/sign-in">Sign In</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/sign-up">Create Account</Link>
+            </Button>
+          </div>
+        </div>
+      )}
       {/*the feed*/}
 
       <PostList initialPosts={posts} initialSort={sort} />

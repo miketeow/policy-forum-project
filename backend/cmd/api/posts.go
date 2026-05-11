@@ -131,6 +131,25 @@ func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) 
 
 	switch sortOrder {
 	case "popular":
+		// define the cache key
+		cacheKey := fmt.Sprintf("posts:popular:anon:limit:%d:offset:%d", pagination.Limit, pagination.Offset)
+
+		// for unauthenticated user
+		if !currentUserID.Valid {
+			// get posts from redis
+			cachedPosts, err := app.rdb.Get(r.Context(), cacheKey).Result()
+			if err == nil {
+				// hit the cache, deserialise directly into the struct slice
+				app.LogInfo(r.Context(), "redis cache hit", slog.String("key", cacheKey))
+				if unmarshalErr := json.Unmarshal([]byte(cachedPosts), &posts); unmarshalErr == nil {
+					break
+				}
+			}
+		}
+
+		// cache miss or authenticated user, get posts from database
+		app.LogInfo(r.Context(), "database hit", slog.String("key", cacheKey))
+
 		popularPosts, dbErr := app.db.ListPostsByPopular(r.Context(), store.ListPostsByPopularParams{
 			Limit:         int32(pagination.Limit),
 			Offset:        pagination.Offset,
@@ -140,6 +159,13 @@ func (app *application) listPostHandler(w http.ResponseWriter, r *http.Request) 
 
 		for _, p := range popularPosts {
 			posts = append(posts, store.ListPostsByNewestRow(p))
+		}
+
+		// save to redis if it is an unauthenticated query
+		if !currentUserID.Valid && err == nil {
+			if jsonBytes, marshalErr := json.Marshal(posts); marshalErr == nil {
+				app.rdb.Set(r.Context(), cacheKey, jsonBytes, time.Hour)
+			}
 		}
 	case "asc":
 		oldestPost, dbErr := app.db.ListPostsByOldest(r.Context(), store.ListPostsByOldestParams{
@@ -454,6 +480,12 @@ func (app *application) votePostHandler(w http.ResponseWriter, r *http.Request) 
 		app.serverErrorResponse(w, r, wrappedErr)
 		return
 	}
+
+	go func() {
+		ctx := context.Background()
+		app.rdb.Del(ctx, "posts:popular:anon:limit:10:offset:0")
+		app.LogInfo(ctx, "redis cache invalidated", slog.String("event", "vote_recorded"))
+	}()
 
 	w.WriteHeader(http.StatusOK)
 }

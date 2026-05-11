@@ -18,6 +18,11 @@ services:
     ports:
       - "16686:16686" # The Web UI for you to view traces
       - "4318:4318" # The OTLP HTTP receiver for Go to send data
-
+  redis:
+    image: redis:8-alpine
+    container_name: policy-forum-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
 volumes:
   pgdata:
