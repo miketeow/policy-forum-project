@@ -1,7 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { getSession } from "@/lib/session";
 import { formatDate, getCategoryColor } from "@/lib/utils";
-import { redirect } from "next/navigation";
 import { CreateCommentForm } from "../_components/create-comment-form";
 import { BreadcrumbNav } from "../_components/breadcumb-nav";
 import { CommentSection } from "../_components/comment-section";
@@ -9,6 +8,10 @@ import { PostAction } from "../_components/post-actions";
 import { VoteButton } from "../_components/vote-button";
 import { PendingPostPoller } from "../_components/pending-post-poller";
 import { fetchSinglePostAction } from "@/app/actions/forum";
+import { ArrowBigDown, ArrowBigUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { AiSummary } from "../_components/ai-summary";
 
 interface PostDetailPageProps {
   params: Promise<{ postId: string }>;
@@ -20,7 +23,6 @@ export default async function PostDetailPage({
   searchParams,
 }: PostDetailPageProps) {
   const user = await getSession();
-  if (!user) redirect("sign-in");
   const { postId } = await params;
   const { sort: sortQuery } = await searchParams;
 
@@ -43,7 +45,8 @@ export default async function PostDetailPage({
     { label: post.title },
   ];
 
-  const isOwner = user.id === post.author_id;
+  const isOwner = user?.id === post.author_id;
+  const isLoggedIn = !!user;
 
   return (
     <div className="flex flex-col mx-auto w-full max-w-3xl px-4 gap-8 py-8">
@@ -85,24 +88,73 @@ export default async function PostDetailPage({
         </div>
 
         <div className="flex items-center mt-6 border-b pb-6">
-          <VoteButton
-            postId={post.id}
-            initialScore={post.score}
-            initialUserVote={post.user_vote}
-          />
+          {user ? (
+            <VoteButton
+              postId={post.id}
+              initialScore={post.score}
+              initialUserVote={post.user_vote}
+            />
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-muted/30 rounded-full px-1 py-1 opacity-70">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 rounded-full text-muted-foreground"
+                  disabled
+                >
+                  <ArrowBigUp />
+                </Button>
+                <span className="text-sm font-bold min-w-5 text-center">
+                  {post.score}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 rounded-full text-muted-foreground"
+                  disabled
+                >
+                  <ArrowBigDown />
+                </Button>
+              </div>
+              <span className="text-xs text-muted-foreground font-medium">
+                Log in to vote
+              </span>
+            </div>
+          )}
         </div>
+      </div>
+
+      <div className="mt-6">
+        <AiSummary
+          postId={post.id}
+          summary={post.summary}
+          isLoggedIn={isLoggedIn}
+        />
       </div>
 
       {/*comment section*/}
       <div className="border-t pt-8 mt-4">
         <h2 className="text-xl font-bold mb-6">Discussion</h2>
 
-        <CreateCommentForm postId={postId} />
+        {user ? (
+          <CreateCommentForm postId={postId} />
+        ) : (
+          <div className="flex flex-col items-center justify-center p-6 mb-8 border-2 border-dashed rounded-lg bg-muted/10 text-center">
+            <h3 className="font-medium mb-1">Join the Conversation</h3>
+            <p className="text-muted-foreground text-sm mb-4">
+              You must be logged in to share your thoughts on this policy.
+            </p>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/sign-in">Sign In to Comment</Link>
+            </Button>
+          </div>
+        )}
 
         <CommentSection
           postId={postId}
           initialSort={sort}
-          currentUserId={user.id}
+          currentUserId={user?.id}
         />
       </div>
     </div>

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"policy-forum-backend/internal/store"
+	"policy-forum-backend/internal/worker"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -98,6 +99,12 @@ func main() {
 		logger:       logger,
 		rdb:          rdb,
 	}
+
+	// Initialize the worker
+	bgWorker := worker.New(app.db, app.logger, app)
+
+	// start the worker loop in goroutine so it doesn't block the main thread
+	go bgWorker.Start(context.Background())
 
 	// Configure the HTTP server with strict timeout
 

@@ -10,6 +10,7 @@ import {
   UpdateCommentArgsSchema,
   VoteSchema,
 } from "@/schemas/forum";
+import { getApiUrl } from "@/lib/api";
 
 export interface ActionState<T = undefined> {
   success: boolean;
@@ -29,6 +30,7 @@ export interface PostDetail {
   author_name: string;
   score: number;
   user_vote: number;
+  summary: string;
 }
 
 export async function fetchPostAction(
@@ -656,5 +658,54 @@ export async function checkPostCategoryAction(
   } catch (error) {
     console.error("voteCommentAction checkPostCategoryAction Error:", error);
     return null;
+  }
+}
+
+export async function triggerAiSummaryAction(
+  postId: string,
+): Promise<ActionState> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session")?.value;
+  if (!token) {
+    return {
+      success: false,
+      message: "Authentication required",
+      error: "Your session has expired. Please log in again",
+    };
+  }
+  try {
+    const response = await fetch(getApiUrl(`/api/posts/${postId}/summary`), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const errorMessage = await parseBackendError(
+        response,
+        "Failed to trigger AI summary",
+      );
+      return {
+        success: false,
+        message: "Failed to queue summary",
+        error: errorMessage,
+      };
+    }
+
+    return {
+      success: true,
+      message: "Summary generation queue successfully",
+    };
+  } catch (error) {
+    console.error("triggerAiSummaryAction Network Error:", error);
+    return {
+      success: false,
+      message: "Connection failure",
+      error:
+        "Could not reach the server. Please check your internet connection again",
+    };
   }
 }

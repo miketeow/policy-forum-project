@@ -43,6 +43,10 @@ func (app *application) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/comments/{commentId}", app.requireAuth(app.deleteCommentHandler))
 	mux.HandleFunc("POST /api/comments/{commentId}/vote", app.requireAuth(app.voteCommentHandler))
 
+	// Background AI Endpoint
+	mux.HandleFunc("GET /api/posts/{postID}/stream", app.streamPostStatusHandler)
+	mux.HandleFunc("POST /api/posts/{postID}/summary", app.requireAuth(app.triggerSummaryHandler))
+
 	handler := corsMiddleware(mux)
 
 	return otelhttp.NewHandler(handler, "policy-forum-api")

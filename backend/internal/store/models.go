@@ -61,6 +61,16 @@ func (ns NullPostCategory) Value() (driver.Value, error) {
 	return string(ns.PostCategory), nil
 }
 
+type BackgroundJob struct {
+	ID           uuid.UUID   `json:"id"`
+	JobType      string      `json:"job_type"`
+	Payload      []byte      `json:"payload"`
+	Status       string      `json:"status"`
+	ErrorMessage pgtype.Text `json:"error_message"`
+	CreatedAt    time.Time   `json:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at"`
+}
+
 type Comment struct {
 	ID        uuid.UUID   `json:"id"`
 	PostID    uuid.UUID   `json:"post_id"`
@@ -88,6 +98,7 @@ type Post struct {
 	CreatedAt time.Time    `json:"created_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
 	Score     int32        `json:"score"`
+	Summary   pgtype.Text  `json:"summary"`
 }
 
 type PostVote struct {

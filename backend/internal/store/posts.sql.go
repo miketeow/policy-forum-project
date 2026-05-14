@@ -33,7 +33,7 @@ func (q *Queries) AtomicUpdatePostScore(ctx context.Context, arg AtomicUpdatePos
 const createPost = `-- name: CreatePost :one
 INSERT INTO posts (id, user_id, title, content, category, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, user_id, title, content, category, created_at, updated_at, score
+RETURNING id, user_id, title, content, category, created_at, updated_at, score, summary
 `
 
 type CreatePostParams struct {
@@ -66,6 +66,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Score,
+		&i.Summary,
 	)
 	return i, err
 }
@@ -89,7 +90,7 @@ func (q *Queries) DeletePost(ctx context.Context, arg DeletePostParams) (int64, 
 }
 
 const getPostByID = `-- name: GetPostByID :one
-SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, posts.score,
+SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, posts.score, posts.summary,
     users.id AS author_id, users.name AS author_name,
     COALESCE(pv.vote,0)::smallint AS user_vote
 FROM posts
@@ -111,6 +112,7 @@ type GetPostByIDRow struct {
 	CreatedAt  time.Time    `json:"created_at"`
 	UpdatedAt  time.Time    `json:"updated_at"`
 	Score      int32        `json:"score"`
+	Summary    pgtype.Text  `json:"summary"`
 	AuthorID   uuid.UUID    `json:"author_id"`
 	AuthorName string       `json:"author_name"`
 	UserVote   int16        `json:"user_vote"`
@@ -127,6 +129,7 @@ func (q *Queries) GetPostByID(ctx context.Context, arg GetPostByIDParams) (GetPo
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Score,
+		&i.Summary,
 		&i.AuthorID,
 		&i.AuthorName,
 		&i.UserVote,
@@ -518,7 +521,7 @@ const updatePost = `-- name: UpdatePost :one
 UPDATE posts
 SET title = $3, content = $4, category = $5, updated_at = $6
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, title, content, category, created_at, updated_at, score
+RETURNING id, user_id, title, content, category, created_at, updated_at, score, summary
 `
 
 type UpdatePostParams struct {
@@ -549,6 +552,7 @@ func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Score,
+		&i.Summary,
 	)
 	return i, err
 }

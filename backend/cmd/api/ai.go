@@ -4,15 +4,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"policy-forum-backend/internal/store"
+	"policy-forum-backend/internal/worker"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"google.golang.org/genai"
 )
 
 type geminiRequest struct {
@@ -189,4 +194,86 @@ func (app *application) categorizeWithAI(ctx context.Context, title, content str
 	)
 	return "OTHER"
 
+}
+
+func (app *application) GenerateSummary(ctx context.Context, title, content string) (string, error) {
+
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  app.geminiAPIKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to create gemini client: %w", err)
+	}
+
+	// configure model parameter
+	config := &genai.GenerateContentConfig{
+		Temperature: genai.Ptr(float32(0.2)),
+	}
+
+	prompt := fmt.Sprintf(`You are a neutral, professional analyst summarizing community feedback for a public policy forum.
+Your goal is to extract the signal from the noise.
+
+Read the following forum post:
+Title: %s
+Content:
+%s
+
+Provide a concise, single-paragraph executive summary based STRICTLY on these rules:
+1. Identify the core issue, grievance, or topic being raised.
+2. Identify the overall sentiment (e.g., frustrated, concerned, inquiring, supportive).
+3. IF the user proposes a specific solution, include it. IF they are just complaining or asking a question, DO NOT invent a solution.
+4. Ignore irrelevant rants, insults, or off-topic noise.
+
+Return ONLY the summary paragraph. Do not include introductory phrases.`, title, content)
+
+	resp, err := client.Models.GenerateContent(ctx, "gemini-3.1-flash-lite", genai.Text(prompt), config)
+	if err != nil {
+		return "", fmt.Errorf("gemini network execution failed: %w", err)
+	}
+
+	finalSummary := strings.TrimSpace(resp.Text())
+
+	if finalSummary == "" {
+		return "", fmt.Errorf("gemini generated an empty summary string")
+	}
+
+	return finalSummary, nil
+}
+
+func (app *application) triggerSummaryHandler(w http.ResponseWriter, r *http.Request) {
+	postIdStr := r.PathValue("postID")
+	postID, err := uuid.Parse(postIdStr)
+	if err != nil {
+		app.badRequestResponse(w, r, errors.New("invalid post ID"))
+		return
+	}
+
+	jobID := uuid.New()
+	payload := worker.ExecSummaryPayload{PostID: postID}
+	payloadBytes, marshalErr := json.Marshal(payload)
+	if marshalErr != nil {
+		app.serverErrorResponse(w, r, marshalErr)
+		return
+	}
+
+	now := time.Now().UTC()
+	enqueueErr := app.db.EnqueueJob(r.Context(), store.EnqueueJobParams{
+		ID:        jobID,
+		JobType:   "EXEC_SUMMARY",
+		Payload:   payloadBytes,
+		Status:    "PENDING",
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	if enqueueErr != nil {
+		app.serverErrorResponse(w, r, enqueueErr)
+		return
+	}
+
+	err = app.writeJSON(w, http.StatusAccepted, envelope{"message": "summary generation queued"})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }

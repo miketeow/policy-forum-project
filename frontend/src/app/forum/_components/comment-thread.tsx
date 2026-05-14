@@ -16,7 +16,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/utils";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, MoreVertical } from "lucide-react";
+import { ArrowBigUp, ExternalLink, MoreVertical } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { CommentVoteButton } from "./comment-vote-button";
@@ -45,7 +45,7 @@ export function CommentThread({
 }: {
   comment: CommentNode;
   postId: string;
-  currentUserId: string;
+  currentUserId?: string;
   showPostLink?: boolean;
   isDashboardView?: boolean;
 }) {
@@ -58,7 +58,7 @@ export function CommentThread({
   const [isPending, setIsPending] = useState(false);
 
   const queryClient = useQueryClient();
-  const isOwner = currentUserId === comment.author_id;
+  const isOwner = currentUserId && currentUserId === comment.author_id;
 
   const { data, status, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
@@ -206,19 +206,29 @@ export function CommentThread({
         <div className="mt-2 flex gap-4 items-center">
           {!isDashboardView && (
             <>
-              <CommentVoteButton
-                commentId={comment.id}
-                initialScore={comment.score}
-                initialUserVote={comment.user_vote}
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-muted-foreground hover:text-foreground text-xs"
-                onClick={() => setIsReplying(!isReplying)}
-              >
-                {isReplying ? "Cancel" : "Reply"}
-              </Button>
+              {currentUserId ? (
+                <CommentVoteButton
+                  commentId={comment.id}
+                  initialScore={comment.score}
+                  initialUserVote={comment.user_vote}
+                />
+              ) : (
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/40 text-muted-foreground rounded-md border">
+                  <ArrowBigUp className="size-3.5" />
+                  <span className="text-xs font-bold">{comment.score}</span>
+                </div>
+              )}
+
+              {currentUserId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-muted-foreground hover:text-foreground text-xs"
+                  onClick={() => setIsReplying(!isReplying)}
+                >
+                  {isReplying ? "Cancel" : "Reply"}
+                </Button>
+              )}
 
               {comment.reply_count > 0 && (
                 <Button

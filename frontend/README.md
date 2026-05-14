@@ -29,9 +29,9 @@ This project follows an evolutionary architecture approach, starting from a foun
 
 ### Phase 6: AI Integration & Asynchronous Workflows
 - [x] **Synchronous AI Integration:** Implement initial LLM categorization for forum posts using structured prompt engineering.
-- [ ] **Asynchronous AI Summarization Worker:** Decouple long-running LLM network calls by building an asynchronous Go background worker.
-- [ ] **Stateful Job Queue:** Implement transactional job state tracking (`PENDING`, `PROCESSING`, `COMPLETED`) in PostgreSQL utilizing `FOR UPDATE SKIP LOCKED` to prevent worker collisions.
-- [ ] **Uni-directional Frontend Streaming:** Replace inefficient client-side polling with Server-Sent Events (SSE) to stream job completion status directly to the Next.js UI.
+- [x] **Asynchronous AI Summarization Worker:** Decouple long-running LLM network calls by building an asynchronous Go background worker.
+- [x] **Stateful Job Queue:** Implement transactional job state tracking (`PENDING`, `PROCESSING`, `COMPLETED`) in PostgreSQL utilizing `FOR UPDATE SKIP LOCKED` to prevent worker collisions.
+- [x] **Uni-directional Frontend Streaming:** Replace inefficient client-side polling with Server-Sent Events (SSE) to stream job completion status directly to the Next.js UI.
 - [ ] **Feature-Flagged Document Generation:** Implement the Strategy Pattern via a Go interface for Executive Policy PDF generation.
   - *Development:* Route to a Gotenberg container for headless-Chrome enterprise PDF rendering.
   - *Production:* Fallback to a `NoOpGenerator` paired with a meticulously styled `@media print` CSS solution on the frontend to optimize cloud costs while retaining professional output.
@@ -39,3 +39,9 @@ This project follows an evolutionary architecture approach, starting from a foun
 ### Phase 7: Distributed Observability
 - [x] **Instrument OpenTelemetry (OTel):** Inject trace IDs at the Next.js edge and propagate context through the Go HTTP router, Redis cache, and PostgreSQL queries.
 - [x] **Latency Visualization:** Output distributed traces to a local Jaeger container to generate waterfall charts for bottleneck identification.
+
+### Phase 8: Advanced Search & Content Interception
+- [ ] **Dual-Database Synchronization:** Implement an event-driven synchronization pipeline to mirror PostgreSQL post data into a local Elasticsearch container, handling partial failures and eventual consistency.
+- [ ] **Feature-Flagged Search Routing:** Refactor the Go search handler to route queries to Elasticsearch when active, falling back gracefully to PostgreSQL native `tsvector` full-text search in production environments.
+- [ ] **Vector Embeddings via `pgvector`:** Integrate the `pgvector` extension and a lightweight LLM embedding model (e.g., `text-embedding-004`) to generate and store semantic mathematical representations of post content.
+- [ ] **Proactive Duplicate Deflection (UX):** Build a debounced typing interceptor on the Next.js frontend that queries the Go backend for cosine similarity matches, prompting users to join existing discussions before submitting duplicate posts.

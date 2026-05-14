@@ -6,6 +6,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -13,13 +14,22 @@ import (
 type Querier interface {
 	// Let the database engine to do the math to guarantee absolute precision
 	AtomicUpdatePostScore(ctx context.Context, arg AtomicUpdatePostScoreParams) error
+	// used by the SSE endpoint to check if frontend need update UI
+	CheckSummaryJobStatus(ctx context.Context, dollar_1 string) (CheckSummaryJobStatusRow, error)
+	CompleteJob(ctx context.Context, arg CompleteJobParams) error
 	CreateComments(ctx context.Context, arg CreateCommentsParams) (Comment, error)
 	CreatePost(ctx context.Context, arg CreatePostParams) (Post, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeleteComment(ctx context.Context, arg DeleteCommentParams) (int64, error)
 	DeletePost(ctx context.Context, arg DeletePostParams) (int64, error)
+	// Finds the oldest PENDING job, locks it, mark it PROCESSING, and hands it to the Go Worker
+	DequeueJob(ctx context.Context, updatedAt time.Time) (DequeueJobRow, error)
+	EnqueueJob(ctx context.Context, arg EnqueueJobParams) error
+	FailJob(ctx context.Context, arg FailJobParams) error
 	GetCommentVote(ctx context.Context, arg GetCommentVoteParams) (int16, error)
 	GetPostByID(ctx context.Context, arg GetPostByIDParams) (GetPostByIDRow, error)
+	// query for background jobs, no joins
+	GetPostForWorker(ctx context.Context, id uuid.UUID) (GetPostForWorkerRow, error)
 	GetPostVoteForUpdate(ctx context.Context, arg GetPostVoteForUpdateParams) (int16, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
@@ -43,6 +53,8 @@ type Querier interface {
 	UpdateCommentScore(ctx context.Context, arg UpdateCommentScoreParams) error
 	UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, error)
 	UpdatePostCategory(ctx context.Context, arg UpdatePostCategoryParams) error
+	// save the finished summary back to the posts
+	UpdatePostSummary(ctx context.Context, arg UpdatePostSummaryParams) error
 	UpdatePostVote(ctx context.Context, arg UpdatePostVoteParams) error
 }
 

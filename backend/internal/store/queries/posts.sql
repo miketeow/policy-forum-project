@@ -4,7 +4,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: GetPostByID :one
-SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, posts.score,
+SELECT posts.id, posts.title, posts.content, posts.category, posts.created_at, posts.updated_at, posts.score, posts.summary,
     users.id AS author_id, users.name AS author_name,
     COALESCE(pv.vote,0)::smallint AS user_vote
 FROM posts

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"policy-forum-backend/internal/store"
+	"policy-forum-backend/internal/worker"
 	"time"
 
 	"github.com/google/uuid"
@@ -75,6 +76,30 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 		wrappedErr := fmt.Errorf("failed to create post in database: %w", err)
 		app.serverErrorResponse(w, r, wrappedErr)
 		return
+	}
+
+	// execute the executive summary job
+	jobID := uuid.New()
+	payload := worker.ExecSummaryPayload{PostID: post.ID}
+	payloadBytes, marshalErr := json.Marshal(payload)
+
+	if marshalErr == nil {
+		enqueueErr := app.db.EnqueueJob(r.Context(), store.EnqueueJobParams{
+			ID:        jobID,
+			JobType:   string(worker.TypeExecSummary),
+			Payload:   payloadBytes,
+			Status:    string(worker.StatusPending),
+			CreatedAt: now,
+			UpdatedAt: now,
+		})
+
+		if enqueueErr != nil {
+			// log the error, but do not fail the HTTP request
+			// because the post was saved, user should not see any error
+			app.LogError(r.Context(), "failed to enqueue summary job",
+				slog.String("post_id", post.ID.String()),
+				slog.String("error", enqueueErr.Error()))
+		}
 	}
 
 	bgCtx := context.WithoutCancel(r.Context())
