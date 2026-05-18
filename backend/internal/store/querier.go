@@ -27,10 +27,12 @@ type Querier interface {
 	EnqueueJob(ctx context.Context, arg EnqueueJobParams) error
 	FailJob(ctx context.Context, arg FailJobParams) error
 	GetCommentVote(ctx context.Context, arg GetCommentVoteParams) (int16, error)
+	GetLatestCategoryReport(ctx context.Context, category PostCategory) (CategoryReport, error)
 	GetPostByID(ctx context.Context, arg GetPostByIDParams) (GetPostByIDRow, error)
 	// query for background jobs, no joins
 	GetPostForWorker(ctx context.Context, id uuid.UUID) (GetPostForWorkerRow, error)
 	GetPostVoteForUpdate(ctx context.Context, arg GetPostVoteForUpdateParams) (int16, error)
+	GetTopPostsWithComments(ctx context.Context, category PostCategory) ([]GetTopPostsWithCommentsRow, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	GlobalSearch(ctx context.Context, searchQuery string) ([]GlobalSearchRow, error)
@@ -48,6 +50,7 @@ type Querier interface {
 	ListUpvotedPostsByUser(ctx context.Context, arg ListUpvotedPostsByUserParams) ([]ListUpvotedPostsByUserRow, error)
 	RemoveCommentVote(ctx context.Context, arg RemoveCommentVoteParams) error
 	RemovePostVote(ctx context.Context, arg RemovePostVoteParams) error
+	SaveCategoryReport(ctx context.Context, arg SaveCategoryReportParams) error
 	SetCommentVote(ctx context.Context, arg SetCommentVoteParams) error
 	UpdateComment(ctx context.Context, arg UpdateCommentParams) (Comment, error)
 	UpdateCommentScore(ctx context.Context, arg UpdateCommentScoreParams) error

@@ -71,6 +71,13 @@ type BackgroundJob struct {
 	UpdatedAt    time.Time   `json:"updated_at"`
 }
 
+type CategoryReport struct {
+	ID          uuid.UUID    `json:"id"`
+	Category    PostCategory `json:"category"`
+	Report      []byte       `json:"report"`
+	GeneratedAt time.Time    `json:"generated_at"`
+}
+
 type Comment struct {
 	ID        uuid.UUID   `json:"id"`
 	PostID    uuid.UUID   `json:"post_id"`

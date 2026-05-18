@@ -107,3 +107,35 @@ LIMIT $2;
 UPDATE posts
 SET category = $2, updated_at = $3
 WHERE id = $1;
+
+-- name: GetTopPostsWithComments :many
+WITH recent_posts AS (
+    SELECT id,title,content,score,created_at
+    FROM posts
+    WHERE category = $1
+    ORDER BY created_at DESC
+    LIMIT 5
+)
+SELECT rp.id,rp.title,rp.content,rp.score,rp.created_at,
+    COALESCE(
+        (
+            SELECT json_agg(
+                json_build_object(
+                    'id', c.id,
+                    'content', c.content,
+                    'score', c.score,
+                    'created_at', c.created_at
+                )
+            )
+            FROM(
+                SELECT id,content,score,created_at
+                FROM comments
+                WHERE post_id = rp.id
+                ORDER BY score DESC
+                LIMIT 5
+            ) c
+        ),
+        '[]'::json
+    )::json AS top_comments
+FROM recent_posts rp
+ORDER BY rp.created_at DESC;
