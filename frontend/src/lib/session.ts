@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { cache } from "react";
-import { getApiUrl } from "./api";
+import { getApiUrl } from "./api-utils";
 
 export const getSession = cache(async () => {
   const cookieStore = await cookies();

@@ -21,6 +21,7 @@ This project follows an evolutionary architecture approach, starting from a foun
 ### Phase 4: Payload Integrity & Standardization
 - [x] **Implement Request Validation:** Replace manual backend nil-checks with declarative struct tags using `go-playground/validator`, returning standardized error JSON for Next.js form handling.
 - [x] **Migrate to Structured Logging:** Strip out standard `log.Printf` and implement `log/slog` for JSON-formatted, key-value logging to enable machine-readable log aggregation.
+- [x] **Enterprise API Client Consolidation**: Refactor Next.js Server Actions to utilize a centralized, generic fetchAPI<T> wrapper. This architectural upgrade will standardize global HTTP error handling, automate authentication header injection (JWT/Cookies), and enforce strict TypeScript response casting across the frontend.
 
 ### Phase 5: High-Performance Read Paths
 - [x] **Implement Cache-Aside Pattern (Redis):** Integrate `go-redis` to cache the "Trending/Popular Posts" hot path. 

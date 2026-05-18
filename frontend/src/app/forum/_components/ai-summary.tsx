@@ -8,7 +8,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getApiUrl } from "@/lib/api";
+import { getApiUrl } from "@/lib/api-utils";
 import {
   ChevronDown,
   ChevronUp,

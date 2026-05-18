@@ -1,6 +1,7 @@
 "use server";
 
-import { getApiUrl } from "@/lib/api";
+import { fetchAPI } from "@/lib/api";
+import { handleActionError } from "@/lib/api-utils";
 import { SignInSchema, SignUpSchema } from "@/schemas/auth";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -32,36 +33,16 @@ export async function signUpAction(data: z.infer<typeof SignUpSchema>) {
   }
 
   try {
-    const res = await fetch(getApiUrl("/api/auth/register"), {
+    const resData = await fetchAPI<{ message?: string }>("/api/auth/register", {
       method: "POST",
-      headers: { "Content-Type": "applicatio/json" },
       body: JSON.stringify(parsed.data),
     });
-
-    if (!res.ok) {
-      const errData = await res.json();
-
-      if (res.status === 422 && errData.fields) {
-        return {
-          success: false,
-          error: "validation failed",
-          fields: errData.fields,
-        };
-      }
-      return {
-        success: false,
-        error: errData.error || errData.message || "Registration failed",
-      };
-    }
-
-    const resData = await res.json();
     return {
       success: true,
       message: resData.message || "Account created successfully",
     };
   } catch (error) {
-    console.error("SignUp Network Error:", error);
-    return { success: false, error: "Unable to connect to server" };
+    return handleActionError(error, "signUpAction");
   }
 }
 
@@ -72,30 +53,14 @@ export async function signInAction(data: z.infer<typeof SignInSchema>) {
   }
 
   try {
-    const res = await fetch(getApiUrl("/api/auth/login"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data),
-    });
+    const resData = await fetchAPI<{ message?: string; token: string }>(
+      "/api/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify(parsed.data),
+      },
+    );
 
-    if (!res.ok) {
-      const errData = await res.json();
-
-      if (res.status === 422 && errData.fields) {
-        return {
-          success: false,
-          error: "Validation failed",
-          fields: errData.fields,
-        };
-      }
-
-      return {
-        success: false,
-        error: errData.error || errData.message || "Invalid credentials",
-      };
-    }
-
-    const resData = await res.json();
     await createSession(resData.token);
 
     return {
@@ -103,7 +68,6 @@ export async function signInAction(data: z.infer<typeof SignInSchema>) {
       message: resData.message || "Successfully signed in",
     };
   } catch (error) {
-    console.error("SignIn Network Error:", error);
-    return { success: false, error: "Unable to connect to the server." };
+    return handleActionError(error, "signInAction");
   }
 }
