@@ -1,5 +1,5 @@
-import { ActionState } from "@/app/actions/forum";
 import { env } from "@/env";
+import { ActionState } from "./api";
 
 export const API_BASE_URL = env.NEXT_PUBLIC_API_URL;
 

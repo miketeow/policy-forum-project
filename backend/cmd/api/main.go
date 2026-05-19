@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/genai"
 )
 
 // dependency injection container
@@ -22,6 +23,7 @@ type application struct {
 	geminiAPIKey string
 	logger       *slog.Logger
 	rdb          *redis.Client
+	aiClient     *genai.Client
 }
 
 func main() {
@@ -90,7 +92,18 @@ func main() {
 
 	logger.Info("Redis connection pool established")
 
-	// 5. DEPENDENCY INJECTION
+	// 5. Initialize the Gemini Client
+	genaiClient, err := genai.NewClient(context.Background(), &genai.ClientConfig{
+		APIKey:  geminiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		logger.Error("Failed to initialize global Gemini client", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	logger.Info("Gemini client initialized")
+
+	// 6. DEPENDENCY INJECTION
 	app := &application{
 		db:           store.New(pool),
 		pool:         pool,
@@ -98,6 +111,7 @@ func main() {
 		geminiAPIKey: geminiKey,
 		logger:       logger,
 		rdb:          rdb,
+		aiClient:     genaiClient,
 	}
 
 	// Initialize the worker

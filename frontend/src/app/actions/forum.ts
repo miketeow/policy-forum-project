@@ -1,6 +1,5 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { CommentNode } from "../forum/_components/comment-thread";
 import { Post } from "../forum/_components/post-card";
 import {
@@ -10,15 +9,7 @@ import {
   VoteSchema,
 } from "@/schemas/forum";
 import { ApiError, handleActionError } from "@/lib/api-utils";
-import { fetchAPI } from "@/lib/api";
-
-export interface ActionState<T = undefined> {
-  success: boolean;
-  message?: string;
-  error?: string;
-  fields?: Record<string, string>;
-  data?: T;
-}
+import { ActionState, fetchAPI, requireAuth } from "@/lib/api";
 
 export interface PostDetail {
   id: string;
@@ -32,18 +23,6 @@ export interface PostDetail {
   score: number;
   user_vote: number;
   summary: string;
-}
-
-async function requireAuth<T = undefined>(): Promise<ActionState<T> | null> {
-  const cookieStore = await cookies();
-  if (!cookieStore.get("session")?.value) {
-    return {
-      success: false,
-      message: "Authentication required",
-      error: "Your session has expired. Please log in again",
-    };
-  }
-  return null;
 }
 
 export async function fetchPostAction(

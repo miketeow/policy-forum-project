@@ -12,6 +12,22 @@ import (
 	"github.com/google/uuid"
 )
 
+const checkPendingReportJob = `-- name: CheckPendingReportJob :one
+SELECT EXISTS (
+    SELECT 1 FROM background_jobs
+    WHERE job_type = 'CATEGORY_REPORT'
+    AND status IN ('PENDING', 'PROCESSING')
+    AND payload->>'category' = $1
+)
+`
+
+func (q *Queries) CheckPendingReportJob(ctx context.Context, payload []byte) (bool, error) {
+	row := q.db.QueryRow(ctx, checkPendingReportJob, payload)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const getLatestCategoryReport = `-- name: GetLatestCategoryReport :one
 SELECT id, category, report, generated_at
 FROM category_reports

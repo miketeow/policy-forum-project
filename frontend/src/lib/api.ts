@@ -1,6 +1,28 @@
+"use server";
 import { cookies } from "next/headers";
-import "server-only";
 import { ApiError, getApiUrl } from "./api-utils";
+
+export interface ActionState<T = undefined> {
+  success: boolean;
+  message?: string;
+  error?: string;
+  fields?: Record<string, string>;
+  data?: T;
+}
+
+export async function requireAuth<
+  T = undefined,
+>(): Promise<ActionState<T> | null> {
+  const cookieStore = await cookies();
+  if (!cookieStore.get("session")?.value) {
+    return {
+      success: false,
+      message: "Authentication required",
+      error: "Your session has expired. Please log in again",
+    };
+  }
+  return null;
+}
 
 export async function fetchAPI<T = unknown>(
   path: string,

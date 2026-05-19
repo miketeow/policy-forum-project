@@ -14,6 +14,7 @@ import (
 type Querier interface {
 	// Let the database engine to do the math to guarantee absolute precision
 	AtomicUpdatePostScore(ctx context.Context, arg AtomicUpdatePostScoreParams) error
+	CheckPendingReportJob(ctx context.Context, payload []byte) (bool, error)
 	// used by the SSE endpoint to check if frontend need update UI
 	CheckSummaryJobStatus(ctx context.Context, dollar_1 string) (CheckSummaryJobStatusRow, error)
 	CompleteJob(ctx context.Context, arg CompleteJobParams) error

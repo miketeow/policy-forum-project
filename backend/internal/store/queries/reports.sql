@@ -8,3 +8,11 @@ FROM category_reports
 WHERE category = $1
 ORDER BY generated_at DESC
 LIMIT 1;
+
+-- name: CheckPendingReportJob :one
+SELECT EXISTS (
+    SELECT 1 FROM background_jobs
+    WHERE job_type = 'CATEGORY_REPORT'
+    AND status IN ('PENDING', 'PROCESSING')
+    AND payload->>'category' = $1
+);

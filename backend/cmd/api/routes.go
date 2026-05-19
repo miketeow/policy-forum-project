@@ -47,6 +47,11 @@ func (app *application) routes() http.Handler {
 	mux.HandleFunc("GET /api/posts/{postID}/stream", app.streamPostStatusHandler)
 	mux.HandleFunc("POST /api/posts/{postID}/summary", app.requireAuth(app.triggerSummaryHandler))
 
+	// Category Report Endpoint
+	mux.HandleFunc("GET /api/reports/{category}", app.getCategoryReportHandler)
+	mux.HandleFunc("POST /api/reports/{category}/generate", app.requireAuth(app.triggerCategoryReportHandler))
+	mux.HandleFunc("GET /api/reports/{category}/status", app.getReportStatusHandler)
+
 	handler := corsMiddleware(mux)
 
 	return otelhttp.NewHandler(handler, "policy-forum-api")

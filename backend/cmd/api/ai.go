@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -198,14 +199,6 @@ func (app *application) categorizeWithAI(ctx context.Context, title, content str
 
 func (app *application) GenerateSummary(ctx context.Context, title, content string) (string, error) {
 
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  app.geminiAPIKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to create gemini client: %w", err)
-	}
-
 	// configure model parameter
 	config := &genai.GenerateContentConfig{
 		Temperature: genai.Ptr(float32(0.2)),
@@ -227,7 +220,7 @@ Provide a concise, single-paragraph executive summary based STRICTLY on these ru
 
 Return ONLY the summary paragraph. Do not include introductory phrases.`, title, content)
 
-	resp, err := client.Models.GenerateContent(ctx, "gemini-3.1-flash-lite", genai.Text(prompt), config)
+	resp, err := app.aiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite", genai.Text(prompt), config)
 	if err != nil {
 		return "", fmt.Errorf("gemini network execution failed: %w", err)
 	}
@@ -273,6 +266,163 @@ func (app *application) triggerSummaryHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	err = app.writeJSON(w, http.StatusAccepted, envelope{"message": "summary generation queued"})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
+
+func (app *application) GenerateCategoryReport(ctx context.Context, category string, promptDataBytes []byte) (string, error) {
+	schema := &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"trend_summary": {
+				Type:        genai.TypeString,
+				Description: "A concise executive summary of the primary concern in this category",
+			},
+			"overall_sentiment": {
+				Type:        genai.TypeString,
+				Description: "Must be exactly POSITIVE, NEGATIVE, or DIVIDED",
+			},
+			"actionable_insight": {
+				Type:        genai.TypeString,
+				Description: "Policy recommendation based on the top voted comment or the post",
+			},
+			"key_themes": {
+				Type: genai.TypeArray,
+				Items: &genai.Schema{
+					Type: genai.TypeString,
+				},
+				Description: "An array of 2 or 4 short phrases highlighting recurring themes",
+			},
+		},
+		Required: []string{"trend_summary", "overall_sentiment", "actionable_insight", "key_themes"},
+	}
+
+	config := &genai.GenerateContentConfig{
+		Temperature:      genai.Ptr(float32(0.1)),
+		ResponseMIMEType: "application/json",
+		ResponseSchema:   schema,
+	}
+
+	systemInstruction := fmt.Sprintf(`You are a lead data analyst for a state government.
+Analyze the provided JSON containing the top upvoted civic forum posts and comments for the %s category.
+Extract the core public sentiment and provide actionable intelligence.`, category)
+
+	prompt := fmt.Sprintf("%s\n\nData:\n%s", systemInstruction, string(promptDataBytes))
+
+	resp, err := app.aiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite", genai.Text(prompt), config)
+	if err != nil {
+		return "", fmt.Errorf("gemini network execution failed: %w", err)
+	}
+
+	jsonResponse := strings.TrimSpace(resp.Text())
+	if jsonResponse == "" {
+		return "", fmt.Errorf("gemini generated an empty response")
+	}
+
+	return jsonResponse, nil
+}
+
+func (app *application) triggerCategoryReportHandler(w http.ResponseWriter, r *http.Request) {
+	categoryParam := r.PathValue("category")
+	cleanCategory := strings.ToUpper(strings.TrimSpace(categoryParam))
+
+	if !validCategories[cleanCategory] {
+		app.badRequestResponse(w, r, errors.New("invalid category specified"))
+		return
+	}
+
+	payload := worker.CategoryReportPayload{
+		Category: cleanCategory,
+	}
+
+	payloadBytes, marshalErr := json.Marshal(payload)
+	if marshalErr != nil {
+		app.serverErrorResponse(w, r, marshalErr)
+		return
+	}
+
+	jobID := uuid.New()
+	now := time.Now().UTC()
+
+	enqueueErr := app.db.EnqueueJob(r.Context(), store.EnqueueJobParams{
+		ID:        jobID,
+		JobType:   "CATEGORY_REPORT",
+		Payload:   payloadBytes,
+		Status:    "PENDING",
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+
+	if enqueueErr != nil {
+		app.serverErrorResponse(w, r, enqueueErr)
+		return
+	}
+
+	app.logger.Info("Category report generation queued", slog.String("category", cleanCategory), slog.String("job_id", jobID.String()))
+
+	err := app.writeJSON(w, http.StatusAccepted, envelope{
+		"message": "Category report generation queued",
+		"job_id":  jobID,
+	})
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
+
+func (app *application) getCategoryReportHandler(w http.ResponseWriter, r *http.Request) {
+	categoryParam := r.PathValue("category")
+	cleanCategory := strings.ToUpper(strings.TrimSpace(categoryParam))
+
+	if !validCategories[cleanCategory] {
+		app.badRequestResponse(w, r, errors.New("invalid category specified"))
+		return
+	}
+
+	reportRow, err := app.db.GetLatestCategoryReport(r.Context(), store.PostCategory(cleanCategory))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			app.notFoundResponse(w, r)
+			return
+		}
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	response := struct {
+		ID          string          `json:"id"`
+		Category    string          `json:"category"`
+		Report      json.RawMessage `json:"report"`
+		GeneratedAt time.Time       `json:"generated_at"`
+	}{
+		ID:          reportRow.ID.String(),
+		Category:    string(reportRow.Category),
+		Report:      json.RawMessage(reportRow.Report),
+		GeneratedAt: reportRow.GeneratedAt,
+	}
+
+	err = app.writeJSON(w, http.StatusOK, response)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+}
+
+func (app *application) getReportStatusHandler(w http.ResponseWriter, r *http.Request) {
+	categoryParam := strings.ToUpper(strings.TrimSpace(r.PathValue("category")))
+
+	if !validCategories[categoryParam] {
+		app.badRequestResponse(w, r, errors.New("invalid category"))
+		return
+	}
+
+	isPending, err := app.db.CheckPendingReportJob(r.Context(), []byte(categoryParam))
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.writeJSON(w, http.StatusOK, envelope{"is_pending": isPending})
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}

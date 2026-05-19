@@ -9,12 +9,14 @@ import (
 	"policy-forum-backend/internal/store"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type AIService interface {
 	GenerateSummary(ctx context.Context, title, content string) (string, error)
+	GenerateCategoryReport(ctx context.Context, category string, payloadBytes []byte) (string, error)
 }
 type Worker struct {
 	db     *store.Queries
@@ -69,8 +71,8 @@ func (w *Worker) processNextJob(ctx context.Context) {
 	switch job.JobType {
 	case "EXEC_SUMMARY":
 		processErr = w.handleExecSummary(ctx, job.Payload)
-	case "SENTIMENT_ANALYSIS":
-		processErr = w.handleSentimentAnalysis(ctx, job.Payload)
+	case "CATEGORY_REPORT":
+		processErr = w.handleCategoryReport(ctx, job.Payload)
 	default:
 		processErr = fmt.Errorf("unknown job type: %s", job.JobType)
 	}
@@ -133,6 +135,54 @@ func (w *Worker) handleExecSummary(ctx context.Context, payloadBytes []byte) err
 	return nil
 }
 
-func (w *Worker) handleSentimentAnalysis(ctx context.Context, payloadBytes []byte) error {
+type CategoryReportPayload struct {
+	Category string `json:"category"`
+}
+
+func (w *Worker) handleCategoryReport(ctx context.Context, jobPayloadBytes []byte) error {
+	var payload CategoryReportPayload
+	if err := json.Unmarshal(jobPayloadBytes, &payload); err != nil {
+		return fmt.Errorf("failed to parse category report payload: %w", err)
+	}
+
+	w.logger.Info("Fetching top posts and comments for category", slog.String("category", payload.Category))
+
+	posts, err := w.db.GetTopPostsWithComments(ctx, store.PostCategory(payload.Category))
+	if err != nil {
+		return fmt.Errorf("failed to fetch category data: %w", err)
+	}
+
+	if len(posts) == 0 {
+		w.logger.Info("No data found for category, skipping report", slog.String("category", payload.Category))
+		return nil
+	}
+
+	// serialize the slice of db structs directly to JSON bytes
+	promptDataBytes, err := json.Marshal(posts)
+	if err != nil {
+		return fmt.Errorf("failed to marshal prompt data: %w", err)
+	}
+
+	w.logger.Info("Generating AI category Report via Gemini...", slog.String("category", payload.Category))
+
+	jsonReportString, err := w.ai.GenerateCategoryReport(ctx, payload.Category, promptDataBytes)
+	if err != nil {
+		return fmt.Errorf("gemini api failed: %w", err)
+	}
+
+	finishTime := time.Now().UTC()
+
+	err = w.db.SaveCategoryReport(ctx, store.SaveCategoryReportParams{
+		ID:          uuid.New(),
+		Category:    store.PostCategory(payload.Category),
+		Report:      []byte(jsonReportString),
+		GeneratedAt: finishTime,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to save category report to db: %w", err)
+	}
+
 	return nil
+
 }
